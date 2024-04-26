@@ -7,8 +7,9 @@
 #include "esp_camera.h"
 #include "esp_http_server.h"
 #include "esp_timer.h"
-#include "camera_pins.h"
+#include "globals.h"
 #include "connect_wifi.h"
+#include "pwm_control.h"
 
 //static const char *TAG = "esp32-cam Webserver";
 
@@ -129,6 +130,8 @@ httpd_uri_t uri_get = {
     .method = HTTP_GET,
     .handler = jpg_stream_httpd_handler,
     .user_ctx = NULL};
+
+
 httpd_handle_t setup_server(void)
 {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
@@ -144,6 +147,9 @@ httpd_handle_t setup_server(void)
 
 void app_main()
 {
+    setup_pwm();
+    motors_check();
+
     esp_err_t err;
 
     // Initialize NVS

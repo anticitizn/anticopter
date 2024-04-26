@@ -10,6 +10,8 @@
     "esp_wifi.h": "c",
     "task.h": "c",
     "esp_http_server.h": "c",
-    "connect_wifi.h": "c"
+    "connect_wifi.h": "c",
+    "format": "c",
+    "cstdint": "cpp"
   }
 }

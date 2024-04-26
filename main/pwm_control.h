@@ -79,12 +79,12 @@ void motors_pwm(int duty_cycle)
     }
 }
 
-void app_main() {
+void pwm_motors_main() {
     setup_pwm();
 
     vTaskDelay(1000 / portTICK_PERIOD_MS); // Delay for 75 ms
 
-    rotor_check();
+    motors_check();
 
     for (int i = 0; i < 100; i++)
     {
@@ -102,7 +102,7 @@ void app_main() {
 
     vTaskDelay(3000 / portTICK_PERIOD_MS);
 
-    rotor_check();
+    motors_check();
 
     vTaskDelete(NULL); // This task does not need to run continuously
 }
