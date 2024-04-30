@@ -29,7 +29,7 @@
 #define I2C_MASTER_RX_BUF_DISABLE   0                          /*!< I2C master doesn't need buffer */
 #define I2C_MASTER_TIMEOUT_MS       1000
 
-#define LSM6DSR_SENSOR_ADDR 0x6A
+#define LSM6DSR_SENSOR_ADDR 0x6B
 
 static int16_t data_raw_acceleration[3];
 static int16_t data_raw_angular_rate[3];
