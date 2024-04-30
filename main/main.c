@@ -10,6 +10,7 @@
 #include "globals.h"
 #include "connect_wifi.h"
 #include "pwm_control.h"
+#include "imu.h"
 
 //static const char *TAG = "esp32-cam Webserver";
 
@@ -147,6 +148,8 @@ httpd_handle_t setup_server(void)
 
 void app_main()
 {
+    lsm6dsr_read_data_polling();
+
     setup_pwm();
     motors_check();
 

@@ -12,6 +12,11 @@
     "esp_http_server.h": "c",
     "connect_wifi.h": "c",
     "format": "c",
-    "cstdint": "cpp"
+    "cstdint": "cpp",
+    "lsm6dsr_reg.h": "c",
+    "array": "c",
+    "string": "c",
+    "string_view": "c",
+    "span": "c"
   }
 }
