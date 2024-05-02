@@ -150,16 +150,20 @@ httpd_handle_t setup_server(void)
 
 void app_main()
 {
-    lsm6dsr_read_data_polling();
+    //lsm6dsr_read_data_polling();
 
     init_leds();
+
+    printf("Starting leds!");
 
     set_led(0, 50, 0, 0);
     set_led(1, 50, 0, 0);
     set_led(2, 50, 0, 0);
     set_led(3, 50, 0, 0);
 
-    vTaskDelay(1000 / portTICK_PERIOD_MS);
+    vTaskDelay(2000 / portTICK_PERIOD_MS);
+
+    printf("Stopping leds!");
 
     set_led(0, 0, 0, 0);
     set_led(1, 0, 0, 0);
