@@ -11,6 +11,8 @@
 #include "connect_wifi.h"
 #include "pwm_control.h"
 #include "imu.h"
+#include "led.h"
+#include "init.h"
 
 //static const char *TAG = "esp32-cam Webserver";
 
@@ -149,6 +151,20 @@ httpd_handle_t setup_server(void)
 void app_main()
 {
     lsm6dsr_read_data_polling();
+
+    init_leds();
+
+    set_led(0, 50, 0, 0);
+    set_led(1, 50, 0, 0);
+    set_led(2, 50, 0, 0);
+    set_led(3, 50, 0, 0);
+
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
+
+    set_led(0, 0, 0, 0);
+    set_led(1, 0, 0, 0);
+    set_led(2, 0, 0, 0);
+    set_led(3, 0, 0, 0);
 
     setup_pwm();
     motors_check();

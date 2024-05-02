@@ -1,4 +1,7 @@
 
+#ifndef ESPDRONE_GLOBALS
+#define ESPDRONE_GLOBALS
+
 #include "driver/rmt_tx.h"
 #include "led_strip/led_strip_encoder.h"
 
@@ -43,3 +46,5 @@ led_strip_encoder_config_t encoder_config = {
 rmt_transmit_config_t tx_config = {
     .loop_count = 0, // no transfer loop
 };
+
+#endif

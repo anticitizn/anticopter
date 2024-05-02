@@ -110,7 +110,7 @@ static void tx_com(uint8_t *tx_buffer, uint16_t len)
  */
 static void platform_delay(uint32_t ms)
 {
-    vTaskDelay(ms / portTICK_PERIOD_MS); // Delay for 1 second
+    vTaskDelay(ms / portTICK_PERIOD_MS);
 }
 
 void lsm6dsr_read_data_polling(void)
@@ -167,14 +167,10 @@ void lsm6dsr_read_data_polling(void)
       /* Read acceleration field data */
       memset(data_raw_acceleration, 0x00, 3 * sizeof(int16_t));
       lsm6dsr_acceleration_raw_get(&dev_ctx, data_raw_acceleration);
-      acceleration_mg[0] =
-        lsm6dsr_from_fs2g_to_mg(data_raw_acceleration[0]);
-      acceleration_mg[1] =
-        lsm6dsr_from_fs2g_to_mg(data_raw_acceleration[1]);
-      acceleration_mg[2] =
-        lsm6dsr_from_fs2g_to_mg(data_raw_acceleration[2]);
-      printf("Acceleration [mg]:%4.2f\t%4.2f\t%4.2f\r\n",
-              acceleration_mg[0], acceleration_mg[1], acceleration_mg[2]);
+      acceleration_mg[0] = lsm6dsr_from_fs2g_to_mg(data_raw_acceleration[0]);
+      acceleration_mg[1] = lsm6dsr_from_fs2g_to_mg(data_raw_acceleration[1]);
+      acceleration_mg[2] = lsm6dsr_from_fs2g_to_mg(data_raw_acceleration[2]);
+      printf("Acceleration [mg]:%4.2f\t%4.2f\t%4.2f\r\n", acceleration_mg[0], acceleration_mg[1], acceleration_mg[2]);
       tx_com(tx_buffer, strlen((char const *)tx_buffer));
     }
 
@@ -184,12 +180,9 @@ void lsm6dsr_read_data_polling(void)
       /* Read angular rate field data */
       memset(data_raw_angular_rate, 0x00, 3 * sizeof(int16_t));
       lsm6dsr_angular_rate_raw_get(&dev_ctx, data_raw_angular_rate);
-      angular_rate_mdps[0] =
-        lsm6dsr_from_fs2000dps_to_mdps(data_raw_angular_rate[0]);
-      angular_rate_mdps[1] =
-        lsm6dsr_from_fs2000dps_to_mdps(data_raw_angular_rate[1]);
-      angular_rate_mdps[2] =
-        lsm6dsr_from_fs2000dps_to_mdps(data_raw_angular_rate[2]);
+      angular_rate_mdps[0] = lsm6dsr_from_fs2000dps_to_mdps(data_raw_angular_rate[0]);
+      angular_rate_mdps[1] = lsm6dsr_from_fs2000dps_to_mdps(data_raw_angular_rate[1]);
+      angular_rate_mdps[2] = lsm6dsr_from_fs2000dps_to_mdps(data_raw_angular_rate[2]);
       printf("Angular rate [mdps]:%4.2f\t%4.2f\t%4.2f\r\n", angular_rate_mdps[0], angular_rate_mdps[1], angular_rate_mdps[2]);
     }
 
@@ -199,8 +192,7 @@ void lsm6dsr_read_data_polling(void)
       /* Read temperature data */
       memset(&data_raw_temperature, 0x00, sizeof(int16_t));
       lsm6dsr_temperature_raw_get(&dev_ctx, &data_raw_temperature);
-      temperature_degC = lsm6dsr_from_lsb_to_celsius(
-                           data_raw_temperature);
+      temperature_degC = lsm6dsr_from_lsb_to_celsius(data_raw_temperature);
       printf("Temperature [degC]:%6.2f\r\n", temperature_degC);
       tx_com(tx_buffer, strlen((char const *)tx_buffer));
     }
