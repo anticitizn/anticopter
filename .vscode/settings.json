@@ -18,6 +18,14 @@
     "string": "c",
     "string_view": "c",
     "span": "c",
-    "globals.h": "c"
+    "globals.h": "c",
+    "rmt_tx.h": "c",
+    "esp_system.h": "c",
+    "nvs_flash.h": "c",
+    "gpio.h": "c",
+    "freertos.h": "c",
+    "pwm_control.h": "c",
+    "led_strip_encoder.h": "c",
+    "udp.h": "c"
   }
 }

@@ -7,4 +7,3 @@ dependencies:
     - if: "target in [linux]"
   espressif/esp32-camera:
     version: '*'
-

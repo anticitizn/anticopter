@@ -129,8 +129,6 @@ void lsm6dsr_read_data_polling(void)
   lsm6dsr_device_id_get(&dev_ctx, &whoamI);
   printf("%d\n", whoamI);
 
-  volatile int foo = 0;
-
   if (whoamI != LSM6DSR_ID)
       while (1);
 

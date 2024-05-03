@@ -1,3 +1,6 @@
+#ifndef ANTICOPTER_WIFI
+#define ANTICOPTER_WIFI
+
 #include <esp_system.h>
 #include <nvs_flash.h>
 #include "freertos/FreeRTOS.h"
@@ -15,9 +18,7 @@
 #include <lwip/netdb.h>
 
 int wifi_connect_status = 0;
-static const char *TAG = "Connect_WiFi";
 int s_retry_num = 0;
-
 
 #define WIFI_SSID "KIMCHILOVERS"
 #define WIFI_PASSWORD "lovekimchi"
@@ -130,3 +131,5 @@ void connect_wifi(void)
     }
     vEventGroupDelete(s_wifi_event_group);
 }
+
+#endif
