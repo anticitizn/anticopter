@@ -2,9 +2,8 @@
 #ifndef ANTICOPTER_LED
 #define ANTICOPTER_LED
 
+#include "driver/rmt_tx.h"
 #include "esp_log.h"
-#include "driver/rmt_tx.h"
-#include "driver/rmt_tx.h"
 #include "led_strip/led_strip_encoder.h"
 
 #define RMT_LED_STRIP_RESOLUTION_HZ 10000000 // 10MHz resolution, 1 tick = 0.1us (led strip needs a high resolution)
@@ -14,8 +13,8 @@ static uint8_t led_strip_pixels[4 * 3];
 rmt_channel_handle_t led_chan = NULL;
 rmt_tx_channel_config_t tx_chan_config = {
     .clk_src = RMT_CLK_SRC_DEFAULT, // select source clock
-    .gpio_num = 4, // GPIO 4
-    .mem_block_symbols = 64, // increase the block size can make the LED less flickering
+    .gpio_num = 4,                  // GPIO 4
+    .mem_block_symbols = 64,        // increase the block size can make the LED less flickering
     .resolution_hz = RMT_LED_STRIP_RESOLUTION_HZ,
     .trans_queue_depth = 4, // set the number of transactions that can be pending in the background
 };

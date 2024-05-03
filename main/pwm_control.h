@@ -1,8 +1,8 @@
-#include <stdio.h>
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
 #include "driver/gpio.h"
 #include "driver/ledc.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include <stdio.h>
 
 #define MOTOR_GPIO_1 39
 #define MOTOR_GPIO_2 40
@@ -14,25 +14,21 @@
 #define PWM_FREQ_HZ 1000
 #define PWM_RESOLUTION LEDC_TIMER_13_BIT
 
-void setup_pwm() {
+void setup_pwm()
+{
     ledc_timer_config_t timer_conf = {
-        .duty_resolution = PWM_RESOLUTION,
-        .freq_hz = PWM_FREQ_HZ,
-        .speed_mode = LEDC_LOW_SPEED_MODE,
-        .timer_num = PWM_TIMER_BASE
-    };
+        .duty_resolution = PWM_RESOLUTION, .freq_hz = PWM_FREQ_HZ, .speed_mode = LEDC_LOW_SPEED_MODE, .timer_num = PWM_TIMER_BASE};
 
     ledc_timer_config(&timer_conf);
 
     // Configure PWM channels for each motor
-    for (int i = 0; i < 4; i++) {
-        ledc_channel_config_t ledc_conf = {
-            .channel    = PWM_CHANNEL_BASE + i,
-            .duty       = 0,
-            .gpio_num   = MOTOR_GPIO_1 + i,
-            .speed_mode = LEDC_LOW_SPEED_MODE,
-            .timer_sel  = PWM_TIMER_BASE
-        };
+    for (int i = 0; i < 4; i++)
+    {
+        ledc_channel_config_t ledc_conf = {.channel = PWM_CHANNEL_BASE + i,
+                                           .duty = 0,
+                                           .gpio_num = MOTOR_GPIO_1 + i,
+                                           .speed_mode = LEDC_LOW_SPEED_MODE,
+                                           .timer_sel = PWM_TIMER_BASE};
 
         ledc_channel_config(&ledc_conf);
     }
@@ -74,12 +70,12 @@ void motors_pwm(int duty_cycle)
         ledc_set_duty(LEDC_LOW_SPEED_MODE, PWM_CHANNEL_BASE + i, duty_cycle * ((1 << LEDC_TIMER_13_BIT) - 1) / 100);
         ledc_update_duty(LEDC_LOW_SPEED_MODE, PWM_CHANNEL_BASE + i);
 
-        
         vTaskDelay(10 / portTICK_PERIOD_MS);
     }
 }
 
-void pwm_motors_main() {
+void pwm_motors_main()
+{
     setup_pwm();
 
     vTaskDelay(1000 / portTICK_PERIOD_MS); // Delay for 75 ms
@@ -90,7 +86,6 @@ void pwm_motors_main() {
     {
         motors_pwm(i);
     }
-    
 
     vTaskDelay(5000 / portTICK_PERIOD_MS);
 
@@ -106,4 +101,3 @@ void pwm_motors_main() {
 
     vTaskDelete(NULL); // This task does not need to run continuously
 }
-

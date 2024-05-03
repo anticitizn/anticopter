@@ -1,24 +1,22 @@
-#include <esp_system.h>
-#include <nvs_flash.h>
+#include "driver/gpio.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "driver/gpio.h"
+#include <esp_system.h>
+#include <nvs_flash.h>
 
 static const char *TAG = "ANTICOPTER";
 
+#include "camera.h"
 #include "connect_wifi.h"
-#include "pwm_control.h"
+#include "http.h"
 #include "imu.h"
 #include "led.h"
-#include "http.h"
-#include "led.h"
-#include "camera.h"
+#include "pwm_control.h"
 #include "udp.h"
-
 
 void app_main()
 {
-    //lsm6dsr_read_data_polling();
+    // lsm6dsr_read_data_polling();
 
     init_leds();
 
@@ -62,7 +60,7 @@ void app_main()
             return;
         }
         setup_server();
-        xTaskCreate(udp_server_task, "udp_server", 4096, (void*)AF_INET, 5, NULL);
+        xTaskCreate(udp_server_task, "udp_server", 4096, (void *)AF_INET, 5, NULL);
         ESP_LOGI(TAG, "ESP32 CAM Web Server is up and running\n");
     }
     else
