@@ -23,8 +23,7 @@
 
 #define I2C_MASTER_SCL_IO 1 /*!< GPIO number used for I2C master clock */
 #define I2C_MASTER_SDA_IO 2 /*!< GPIO number used for I2C master data  */
-#define I2C_MASTER_NUM                                                                                                                     \
-    I2C_NUM_0 /*!< I2C master i2c port number, the number of i2c peripheral interfaces available will depend on the chip */
+#define I2C_MASTER_NUM I2C_NUM_0 /*!< I2C master i2c port number, the number of i2c peripheral interfaces available will depend on the chip */
 #define I2C_MASTER_FREQ_HZ 100000   /*!< I2C master clock frequency */
 #define I2C_MASTER_TX_BUF_DISABLE 0 /*!< I2C master doesn't need buffer */
 #define I2C_MASTER_RX_BUF_DISABLE 0 /*!< I2C master doesn't need buffer */
@@ -138,14 +137,18 @@ void lsm6dsr_read_data_polling(void)
 
     /* Disable I3C interface */
     lsm6dsr_i3c_disable_set(&dev_ctx, LSM6DSR_I3C_DISABLE);
+
     /* Enable Block Data Update */
     lsm6dsr_block_data_update_set(&dev_ctx, PROPERTY_ENABLE);
+
     /* Set Output Data Rate */
-    lsm6dsr_xl_data_rate_set(&dev_ctx, LSM6DSR_XL_ODR_12Hz5);
-    lsm6dsr_gy_data_rate_set(&dev_ctx, LSM6DSR_GY_ODR_12Hz5);
+    lsm6dsr_xl_data_rate_set(&dev_ctx, LSM6DSR_XL_ODR_104Hz);
+    lsm6dsr_gy_data_rate_set(&dev_ctx, LSM6DSR_GY_ODR_104Hz);
+
     /* Set full scale */
     lsm6dsr_xl_full_scale_set(&dev_ctx, LSM6DSR_2g);
-    lsm6dsr_gy_full_scale_set(&dev_ctx, LSM6DSR_2000dps);
+    lsm6dsr_gy_full_scale_set(&dev_ctx, LSM6DSR_1000dps);
+
     /* Configure filtering chain(No aux interface)
      * Accelerometer - LPF1 + LPF2 path
      */
@@ -178,9 +181,9 @@ void lsm6dsr_read_data_polling(void)
             /* Read angular rate field data */
             memset(data_raw_angular_rate, 0x00, 3 * sizeof(int16_t));
             lsm6dsr_angular_rate_raw_get(&dev_ctx, data_raw_angular_rate);
-            angular_rate_mdps[0] = lsm6dsr_from_fs2000dps_to_mdps(data_raw_angular_rate[0]);
-            angular_rate_mdps[1] = lsm6dsr_from_fs2000dps_to_mdps(data_raw_angular_rate[1]);
-            angular_rate_mdps[2] = lsm6dsr_from_fs2000dps_to_mdps(data_raw_angular_rate[2]);
+            angular_rate_mdps[0] = lsm6dsr_from_fs1000dps_to_mdps(data_raw_angular_rate[0]);
+            angular_rate_mdps[1] = lsm6dsr_from_fs1000dps_to_mdps(data_raw_angular_rate[1]);
+            angular_rate_mdps[2] = lsm6dsr_from_fs1000dps_to_mdps(data_raw_angular_rate[2]);
             printf("Angular rate [mdps]:%4.2f\t%4.2f\t%4.2f\r\n", angular_rate_mdps[0], angular_rate_mdps[1], angular_rate_mdps[2]);
         }
 
