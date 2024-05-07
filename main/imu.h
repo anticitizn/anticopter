@@ -1,3 +1,7 @@
+
+#ifndef ANTICOPTER_IMU
+#define ANTICOPTER_IMU
+
 /* i2c - Simple example
 
    Simple I2C example that shows how to initialize I2C
@@ -97,7 +101,10 @@ static int32_t platform_read(void *handle, uint8_t reg, uint8_t *bufp, uint16_t 
  * @param  len           number of byte to send
  *
  */
-static void tx_com(uint8_t *tx_buffer, uint16_t len) { return; }
+static void tx_com(uint8_t *tx_buffer, uint16_t len) 
+{
+    return; 
+}
 
 /*
  * @brief  platform specific delay (platform dependent)
@@ -105,7 +112,10 @@ static void tx_com(uint8_t *tx_buffer, uint16_t len) { return; }
  * @param  ms        delay in ms
  *
  */
-static void platform_delay(uint32_t ms) { vTaskDelay(ms / portTICK_PERIOD_MS); }
+static void platform_delay(uint32_t ms) 
+{
+    vTaskDelay(ms / portTICK_PERIOD_MS); 
+}
 
 void lsm6dsr_read_data_polling(void)
 {
@@ -121,7 +131,6 @@ void lsm6dsr_read_data_polling(void)
     platform_delay(10);
     /* Check device ID */
     lsm6dsr_device_id_get(&dev_ctx, &whoamI);
-    printf("%d\n", whoamI);
 
     if (whoamI != LSM6DSR_ID)
         while (1)
@@ -170,7 +179,7 @@ void lsm6dsr_read_data_polling(void)
             acceleration_mg[0] = lsm6dsr_from_fs2g_to_mg(data_raw_acceleration[0]);
             acceleration_mg[1] = lsm6dsr_from_fs2g_to_mg(data_raw_acceleration[1]);
             acceleration_mg[2] = lsm6dsr_from_fs2g_to_mg(data_raw_acceleration[2]);
-            printf("Acceleration [mg]:%4.2f\t%4.2f\t%4.2f\r\n", acceleration_mg[0], acceleration_mg[1], acceleration_mg[2]);
+            //printf("Acceleration [mg]:%4.2f\t%4.2f\t%4.2f\r\n", acceleration_mg[0], acceleration_mg[1], acceleration_mg[2]);
             tx_com(tx_buffer, strlen((char const *)tx_buffer));
         }
 
@@ -184,7 +193,7 @@ void lsm6dsr_read_data_polling(void)
             angular_rate_mdps[0] = lsm6dsr_from_fs1000dps_to_mdps(data_raw_angular_rate[0]);
             angular_rate_mdps[1] = lsm6dsr_from_fs1000dps_to_mdps(data_raw_angular_rate[1]);
             angular_rate_mdps[2] = lsm6dsr_from_fs1000dps_to_mdps(data_raw_angular_rate[2]);
-            printf("Angular rate [mdps]:%4.2f\t%4.2f\t%4.2f\r\n", angular_rate_mdps[0], angular_rate_mdps[1], angular_rate_mdps[2]);
+            //printf("Angular rate [mdps]:%4.2f\t%4.2f\t%4.2f\r\n", angular_rate_mdps[0], angular_rate_mdps[1], angular_rate_mdps[2]);
         }
 
         lsm6dsr_temp_flag_data_ready_get(&dev_ctx, &reg);
@@ -195,8 +204,10 @@ void lsm6dsr_read_data_polling(void)
             memset(&data_raw_temperature, 0x00, sizeof(int16_t));
             lsm6dsr_temperature_raw_get(&dev_ctx, &data_raw_temperature);
             temperature_degC = lsm6dsr_from_lsb_to_celsius(data_raw_temperature);
-            printf("Temperature [degC]:%6.2f\r\n", temperature_degC);
+            //printf("Temperature [degC]:%6.2f\r\n", temperature_degC);
             tx_com(tx_buffer, strlen((char const *)tx_buffer));
         }
     }
 }
+
+#endif

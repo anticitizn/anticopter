@@ -14,7 +14,20 @@
 #include "lwip/sys.h"
 #include <lwip/netdb.h>
 
+#include "imu.h"
+
 #define PORT 3333
+
+// Function to format the data into a string
+void format_data(char *buffer, int16_t *acceleration, int16_t *angular_rate, int16_t temperature) {
+    // Assuming the format "Acceleration[X,Y,Z];AngularRate[X,Y,Z];Temperature[T];"
+    sprintf(buffer, "\nAcceleration[%d,%d,%d]\nAngularRate[%d,%d,%d]\nTemperature[%d]\n",
+            acceleration[0], acceleration[1], acceleration[2],
+            angular_rate[0], angular_rate[1], angular_rate[2],
+            temperature);
+}
+
+char data_buffer[256] = {0};
 
 static void udp_server_task(void *pvParameters)
 {
@@ -94,11 +107,18 @@ static void udp_server_task(void *pvParameters)
                 ESP_LOGI(TAG, "Received %d bytes from %s:", len, addr_str);
                 ESP_LOGI(TAG, "%s", rx_buffer);
 
-                int err = sendto(sock, rx_buffer, len, 0, (struct sockaddr *)&source_addr, sizeof(source_addr));
-                if (err < 0)
+                int send_err = 0;
+                while (send_err < 0)
                 {
-                    ESP_LOGE(TAG, "Error occurred during sending: errno %d", errno);
-                    break;
+                    format_data(data_buffer, data_raw_acceleration, data_raw_angular_rate, data_raw_temperature);
+
+                    send_err = sendto(sock, data_buffer, strlen(data_buffer), 0, (struct sockaddr *)&source_addr, sizeof(source_addr));
+                    if (send_err < 0)
+                    {
+                        ESP_LOGE(TAG, "Error occurred during sending data: errno %d", errno);
+                        break;
+                    }
+                    vTaskDelay(50 / portTICK_PERIOD_MS); 
                 }
             }
         }

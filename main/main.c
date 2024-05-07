@@ -60,7 +60,8 @@ void app_main()
             return;
         }
         setup_server();
-        xTaskCreate(udp_server_task, "udp_server", 4096, (void *)AF_INET, 5, NULL);
+        xTaskCreatePinnedToCore(lsm6dsr_read_data_polling, "imu_polling", 4096, NULL, 5, NULL, 0);
+        xTaskCreatePinnedToCore(udp_server_task, "tcp_server", 4096, (void*)AF_INET, 5, NULL, 1);
         ESP_LOGI(TAG, "ESP32 CAM Web Server is up and running\n");
     }
     else
