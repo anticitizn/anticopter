@@ -26,6 +26,7 @@
     "freertos.h": "c",
     "pwm_control.h": "c",
     "led_strip_encoder.h": "c",
-    "udp.h": "c"
+    "udp.h": "c",
+    "cstdlib": "c"
   }
 }
