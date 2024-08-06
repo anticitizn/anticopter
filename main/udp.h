@@ -35,61 +35,11 @@ struct sockaddr_storage source_addr;
 
 void udp_camera_send_data(httpd_req_t *req)
 {
-    camera_fb_t *fb = NULL;
-    esp_err_t res = ESP_OK;
-    size_t _jpg_buf_len;
-    uint8_t *_jpg_buf;
-    char *part_buf[64];
-    static int64_t last_frame = 0;
+    //char *part_buf[64];
+    cam_take_picture();
 
-    for (int i = 0; i < 100; i++)
-    {
-        if (!last_frame)
-        {
-            last_frame = esp_timer_get_time();
-        }
+    sendto(sock, _jpg_buf, _jpg_buf_len, 0, (struct sockaddr *)&source_addr, sizeof(source_addr));
 
-        fb = esp_camera_fb_get();
-        if (!fb)
-        {
-            ESP_LOGE(TAG, "Camera capture failed");
-            res = ESP_FAIL;
-            vTaskDelete(NULL);
-        }
-        if (fb->format != PIXFORMAT_JPEG)
-        {
-            printf("Converting to JPEG\n");
-            bool jpeg_converted = frame2jpg(fb, 80, &_jpg_buf, &_jpg_buf_len);
-            if (!jpeg_converted)
-            {
-                ESP_LOGE(TAG, "JPEG compression failed");
-                esp_camera_fb_return(fb);
-                res = ESP_FAIL;
-            }
-        }
-        else
-        {
-            _jpg_buf_len = fb->len;
-            _jpg_buf = fb->buf;
-        }
-
-        sendto(sock, _jpg_buf, _jpg_buf_len, 0, (struct sockaddr *)&source_addr, sizeof(source_addr));
-
-        esp_camera_fb_return(fb);
-        if (res != ESP_OK)
-        {
-            vTaskDelete(NULL);
-        }
-        int64_t fr_end = esp_timer_get_time();
-        int64_t frame_time = fr_end - last_frame;
-        last_frame = fr_end;
-        frame_time /= 1000;
-        ESP_LOGI(TAG, "MJPG: %uKB %ums (%.1ffps)", (unsigned int)(_jpg_buf_len / 1024), (unsigned int)frame_time,
-                    1000.0 / (unsigned int)frame_time);
-    }
-    
-
-    last_frame = 0;
     vTaskDelete(NULL);
 }
 

@@ -6,6 +6,8 @@
 #include "freertos/task.h"
 #include <esp_system.h>
 #include <esp_camera.h>
+#include <esp_timer.h>
+#include <esp_log.h>
 
 #define CONFIG_XCLK_FREQ 10000000
 
@@ -31,6 +33,9 @@
 #define CAM_PIN_VSYNC 47
 #define CAM_PIN_HREF 21
 #define CAM_PIN_PCLK 10
+
+size_t _jpg_buf_len;
+uint8_t *_jpg_buf;
 
 static esp_err_t init_camera(void)
 {
@@ -68,6 +73,43 @@ static esp_err_t init_camera(void)
         return err;
     }
     return ESP_OK;
+}
+
+void cam_take_picture()
+{
+    camera_fb_t *fb = NULL;
+    esp_err_t res = ESP_OK;
+    
+    static int64_t last_frame = 0;
+
+    if (!last_frame)
+    {
+        last_frame = esp_timer_get_time();
+    }
+
+    fb = esp_camera_fb_get();
+    if (!fb)
+    {
+        ESP_LOGE(TAG, "Camera capture failed");
+        res = ESP_FAIL;
+        return;
+    }
+
+    // Camera format is in JPEG already
+    _jpg_buf_len = fb->len;
+    _jpg_buf = fb->buf;
+
+    esp_camera_fb_return(fb);
+
+    int64_t fr_end = esp_timer_get_time();
+    int64_t frame_time = fr_end - last_frame;
+    last_frame = fr_end;
+    frame_time /= 1000;
+    ESP_LOGI(TAG, "MJPG: %uKB %ums (%.1ffps)", (unsigned int)(_jpg_buf_len / 1024), (unsigned int)frame_time,
+                1000.0 / (unsigned int)frame_time);
+
+
+    last_frame = 0;
 }
 
 #endif
