@@ -27,6 +27,8 @@
     "pwm_control.h": "c",
     "led_strip_encoder.h": "c",
     "udp.h": "c",
-    "cstdlib": "c"
+    "cstdlib": "c",
+    "camera.h": "c",
+    "netdb.h": "c"
   }
 }

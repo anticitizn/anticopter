@@ -33,26 +33,22 @@ bool connected = 0;
 int sock;
 struct sockaddr_storage source_addr;
 
-void udp_camera_send_data(httpd_req_t *req)
+void udp_camera_send_data()
 {
-    //char *part_buf[64];
+    ESP_LOGI(TAG, "Taking a photo!");
     cam_take_picture();
 
     sendto(sock, _jpg_buf, _jpg_buf_len, 0, (struct sockaddr *)&source_addr, sizeof(source_addr));
-
+    
     vTaskDelete(NULL);
 }
 
 static void udp_imu_send_task()
 {
-    printf("Starting UDP send!");
-    while (connected)
-    {
-        printf("Sending udp data!\n");
-        format_data(data_buffer, data_raw_acceleration, data_raw_angular_rate, data_raw_temperature);
-        sendto(sock, data_buffer, strlen(data_buffer), 0, (struct sockaddr *)&source_addr, sizeof(source_addr));
-        vTaskDelay(20 / portTICK_PERIOD_MS);
-    }
+    printf("Sending udp data!\n");
+    format_data(data_buffer, data_raw_acceleration, data_raw_angular_rate, data_raw_temperature);
+    sendto(sock, data_buffer, strlen(data_buffer), 0, (struct sockaddr *)&source_addr, sizeof(source_addr));
+    vTaskDelay(20 / portTICK_PERIOD_MS);
     vTaskDelete(NULL);
     
 }
@@ -118,8 +114,14 @@ static void udp_server_task(void *pvParameters)
                 rx_buffer[len] = 0; // Null-terminate whatever we received and treat like a string...
                 ESP_LOGI(TAG, "Received %d bytes from %s:", len, addr_str);
                 ESP_LOGI(TAG, "%s", rx_buffer);
-
-                xTaskCreate(udp_camera_send_data, "udp_send_task", 4096, NULL, 5, NULL);
+                if (strcmp("get_camera",rx_buffer) == 0)
+                {
+                    xTaskCreate(udp_camera_send_data, "udp_send_task", 4096, NULL, 5, NULL);
+                }
+                else if (strcmp("get_imu",rx_buffer) == 0)
+                {
+                    xTaskCreate(udp_imu_send_task, "udp_send_task", 4096, NULL, 5, NULL);
+                }                
             }
         }
 
