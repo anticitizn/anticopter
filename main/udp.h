@@ -19,6 +19,11 @@
 
 #define PORT 3333
 
+// 64kb rx buffer
+char rx_buffer[16000];
+char *header = rx_buffer;
+char *payload = rx_buffer + 128;
+
 // Function to format the data into a string
 void format_data(char *buffer, int16_t *acceleration, int16_t *angular_rate, int16_t temperature) {
     // Assuming the format "Acceleration[X,Y,Z];AngularRate[X,Y,Z];Temperature[T];"
@@ -55,8 +60,8 @@ static void udp_imu_send_task()
 
 static void udp_server_task(void *pvParameters)
 {
-    char rx_buffer[128];
     char addr_str[128];
+
     int addr_family = AF_INET;
     int ip_protocol = 0;
     struct sockaddr_in6 dest_addr;
@@ -64,6 +69,7 @@ static void udp_server_task(void *pvParameters)
     while (1)
     {
         struct sockaddr_in *dest_addr_ip4 = (struct sockaddr_in *)&dest_addr;
+        
         dest_addr_ip4->sin_addr.s_addr = htonl(INADDR_ANY);
         dest_addr_ip4->sin_family = AF_INET;
         dest_addr_ip4->sin_port = htons(PORT);
@@ -111,19 +117,22 @@ static void udp_server_task(void *pvParameters)
                 // Get the sender's ip address as string
                 inet_ntoa_r(((struct sockaddr_in *)&source_addr)->sin_addr, addr_str, sizeof(addr_str) - 1);
 
-                rx_buffer[len] = 0; // Null-terminate whatever we received and treat like a string...
+                header[127] = 0; // The header should already be null-terminated but just in case
                 ESP_LOGI(TAG, "Received %d bytes from %s:", len, addr_str);
-                ESP_LOGI(TAG, "%s", rx_buffer);
-                if (strcmp("get_camera",rx_buffer) == 0)
+                ESP_LOGI(TAG, "Header: %s", header);
+                
+                if (strcmp("get_camera", header) == 0)
                 {
                     xTaskCreate(udp_camera_send_data, "udp_send_task", 4096, NULL, 5, NULL);
                 }
-                else if (strcmp("get_imu",rx_buffer) == 0)
+                else if (strcmp("get_imu", header) == 0)
                 {
                     xTaskCreate(udp_imu_send_task, "udp_send_task", 4096, NULL, 5, NULL);
                 }                
             }
         }
+
+        memset(rx_buffer, 0, 128);
 
         if (sock != -1)
         {

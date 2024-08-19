@@ -27,7 +27,7 @@ void app_main()
     set_led(2, 50, 0, 0);
     set_led(3, 50, 0, 0);
 
-    vTaskDelay(2000 / portTICK_PERIOD_MS);
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
 
     printf("Stopping leds!");
 
@@ -36,8 +36,8 @@ void app_main()
     set_led(2, 0, 0, 0);
     set_led(3, 0, 0, 0);
 
-    setup_pwm();
-    motors_check();
+    //setup_pwm();
+    //motors_check();
 
     esp_err_t err;
 
