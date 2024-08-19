@@ -16,6 +16,7 @@
 
 #include "imu.h"
 #include "camera.h"
+#include "led.h"
 
 #define PORT 3333
 
@@ -120,6 +121,7 @@ static void udp_server_task(void *pvParameters)
                 header[127] = 0; // The header should already be null-terminated but just in case
                 ESP_LOGI(TAG, "Received %d bytes from %s:", len, addr_str);
                 ESP_LOGI(TAG, "Header: %s", header);
+                ESP_LOGI(TAG, "Payload: %s", payload);
                 
                 if (strcmp("get_camera", header) == 0)
                 {
@@ -129,11 +131,36 @@ static void udp_server_task(void *pvParameters)
                 {
                     xTaskCreate(udp_imu_send_task, "udp_send_task", 4096, NULL, 5, NULL);
                 }                
+                else if (strcmp("set_led", header) == 0)
+                {
+                    int led_num, r, g, b;
+
+                    if (sscanf(payload, "%d %d %d %d", &led_num, &r, &g, &b) == 4) 
+                    {
+                        if (led_num == 4)
+                        {
+                            for (int i = 0; i < 4; i++)
+                            {
+                                set_led(i, r, g, b);
+                            }
+                        }
+                        else
+                        {
+                            set_led(led_num, r, g, b);
+                        }
+                        
+                        ESP_LOGI(TAG, "LED# %d | RGB: %d, %d, %d", led_num, r, g, b);
+                    } 
+                    else 
+                    {
+                        ESP_LOGI(TAG, "Failed to extract LED data from the payload!");
+                    }
+                }
             }
+
+            memset(rx_buffer, 0, 128);
         }
-
-        memset(rx_buffer, 0, 128);
-
+        
         if (sock != -1)
         {
             ESP_LOGE(TAG, "Shutting down socket and restarting...");
