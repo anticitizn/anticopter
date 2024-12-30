@@ -23,6 +23,7 @@
 #include "driver/i2c.h"
 #include "esp_log.h"
 #include "lsm6dsr/lsm6dsr_reg.h"
+#include "camera.h"
 #include <stdio.h>
 
 #define I2C_MASTER_SCL_IO 1 /*!< GPIO number used for I2C master clock */
@@ -207,6 +208,8 @@ void lsm6dsr_read_data_polling(void)
             //printf("Temperature [degC]:%6.2f\r\n", temperature_degC);
             tx_com(tx_buffer, strlen((char const *)tx_buffer));
         }
+
+        cam_take_picture();
     }
 }
 

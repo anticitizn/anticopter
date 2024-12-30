@@ -15,10 +15,25 @@
 #include <lwip/netdb.h>
 
 #include "imu.h"
-#include "camera.h"
+//#include "camera.h"
 #include "led.h"
 
 #define PORT 3333
+
+typedef struct 
+{
+    uint8_t cam_data[60000];
+    int16_t imu_data[7];
+} drone_out;
+
+typedef struct
+{
+    uint32_t motors[4];
+    uint32_t lights[4][3];
+} drone_in;
+
+drone_out data_out = {0};
+drone_in data_in = {0};
 
 // 64kb rx buffer
 char rx_buffer[16000];
@@ -38,26 +53,6 @@ char data_buffer[256] = {0};
 bool connected = 0;
 int sock;
 struct sockaddr_storage source_addr;
-
-void udp_camera_send_data()
-{
-    ESP_LOGI(TAG, "Taking a photo!");
-    cam_take_picture();
-
-    sendto(sock, _jpg_buf, _jpg_buf_len, 0, (struct sockaddr *)&source_addr, sizeof(source_addr));
-    
-    vTaskDelete(NULL);
-}
-
-static void udp_imu_send_task()
-{
-    printf("Sending udp data!\n");
-    format_data(data_buffer, data_raw_acceleration, data_raw_angular_rate, data_raw_temperature);
-    sendto(sock, data_buffer, strlen(data_buffer), 0, (struct sockaddr *)&source_addr, sizeof(source_addr));
-    vTaskDelay(20 / portTICK_PERIOD_MS);
-    vTaskDelete(NULL);
-    
-}
 
 static void udp_server_task(void *pvParameters)
 {
@@ -125,11 +120,13 @@ static void udp_server_task(void *pvParameters)
                 
                 if (strcmp("get_camera", header) == 0)
                 {
-                    xTaskCreate(udp_camera_send_data, "udp_send_task", 4096, NULL, 5, NULL);
+                    //cam_take_picture();
+                    sendto(sock, _jpg_buf, _jpg_buf_len, 0, (struct sockaddr *)&source_addr, sizeof(source_addr));
                 }
                 else if (strcmp("get_imu", header) == 0)
                 {
-                    xTaskCreate(udp_imu_send_task, "udp_send_task", 4096, NULL, 5, NULL);
+                    format_data(data_buffer, data_raw_acceleration, data_raw_angular_rate, data_raw_temperature);
+                    sendto(sock, data_buffer, strlen(data_buffer), 0, (struct sockaddr *)&source_addr, sizeof(source_addr));
                 }                
                 else if (strcmp("set_led", header) == 0)
                 {
