@@ -35,15 +35,15 @@ typedef struct
 drone_out data_out = {0};
 drone_in data_in = {0};
 
-// 64kb rx buffer
+// 16kb rx buffer
 char rx_buffer[16000];
 char *header = rx_buffer;
 char *payload = rx_buffer + 128;
 
 // Function to format the data into a string
-void format_data(char *buffer, int16_t *acceleration, int16_t *angular_rate, int16_t temperature) {
+void format_data(char *buffer, float *acceleration, float *angular_rate, float temperature) {
     // Assuming the format "Acceleration[X,Y,Z];AngularRate[X,Y,Z];Temperature[T];"
-    sprintf(buffer, "\nAcceleration[%d,%d,%d]\nAngularRate[%d,%d,%d]\nTemperature[%d]\n",
+    sprintf(buffer, "\nAcceleration[%f,%f,%f]\nAngularRate[%f,%f,%f]\nTemperature[%f]\n",
             acceleration[0], acceleration[1], acceleration[2],
             angular_rate[0], angular_rate[1], angular_rate[2],
             temperature);
@@ -120,12 +120,11 @@ static void udp_server_task(void *pvParameters)
                 
                 if (strcmp("get_camera", header) == 0)
                 {
-                    //cam_take_picture();
                     sendto(sock, _jpg_buf, _jpg_buf_len, 0, (struct sockaddr *)&source_addr, sizeof(source_addr));
                 }
                 else if (strcmp("get_imu", header) == 0)
                 {
-                    format_data(data_buffer, data_raw_acceleration, data_raw_angular_rate, data_raw_temperature);
+                    format_data(data_buffer, acceleration_mg, angular_rate_mdps, temperature_degC);
                     sendto(sock, data_buffer, strlen(data_buffer), 0, (struct sockaddr *)&source_addr, sizeof(source_addr));
                 }                
                 else if (strcmp("set_led", header) == 0)

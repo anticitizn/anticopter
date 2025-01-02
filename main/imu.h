@@ -153,7 +153,7 @@ void lsm6dsr_read_data_polling(void)
 
     /* Set Output Data Rate */
     lsm6dsr_xl_data_rate_set(&dev_ctx, LSM6DSR_XL_ODR_104Hz);
-    lsm6dsr_gy_data_rate_set(&dev_ctx, LSM6DSR_GY_ODR_104Hz);
+    lsm6dsr_gy_data_rate_set(&dev_ctx, LSM6DSR_XL_ODR_104Hz);
 
     /* Set full scale */
     lsm6dsr_xl_full_scale_set(&dev_ctx, LSM6DSR_2g);
@@ -162,8 +162,8 @@ void lsm6dsr_read_data_polling(void)
     /* Configure filtering chain(No aux interface)
      * Accelerometer - LPF1 + LPF2 path
      */
-    lsm6dsr_xl_hp_path_on_out_set(&dev_ctx, LSM6DSR_LP_ODR_DIV_100);
-    lsm6dsr_xl_filter_lp2_set(&dev_ctx, PROPERTY_ENABLE);
+    lsm6dsr_xl_hp_path_on_out_set(&dev_ctx, 0);
+    lsm6dsr_xl_filter_lp2_set(&dev_ctx, PROPERTY_DISABLE);
 
     /* Read samples in polling mode */
     while (1)
@@ -209,7 +209,7 @@ void lsm6dsr_read_data_polling(void)
             tx_com(tx_buffer, strlen((char const *)tx_buffer));
         }
 
-        cam_take_picture();
+        //cam_take_picture();
     }
 }
 

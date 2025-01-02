@@ -11,10 +11,6 @@
 
 #define CONFIG_XCLK_FREQ 10000000
 
-// LED pins and params
-#define RMT_LED_STRIP_RESOLUTION_HZ 10000000 // 10MHz resolution, 1 tick = 0.1us (led strip needs a high resolution)
-#define RMT_LED_STRIP_GPIO_NUM 4
-
 // Camera pins
 #define CAM_PIN_PWDN -1  // power down is not used
 #define CAM_PIN_RESET -1 // software reset will be performed
