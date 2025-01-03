@@ -41,14 +41,13 @@ char *header = rx_buffer;
 char *payload = rx_buffer + 128;
 
 // Function to format the data into a string
-void format_data(char *buffer, float *acceleration, float *angular_rate, float temperature, float *position, float *orientation) {
+void format_data(char *buffer, float *acceleration, float *angular_rate, float temperature, float *orientation) {
     // Assuming the format "Acceleration[X,Y,Z];AngularRate[X,Y,Z];Temperature[T];"
-    sprintf(buffer, "\nAcceleration[%f,%f,%f]\nAngularRate[%f,%f,%f]\nTemperature[%f]\nOrientation[%f,%f,%f]\nPosition[%f,%f,%f]",
+    sprintf(buffer, "\nAcceleration[%f,%f,%f]\nAngularRate[%f,%f,%f]\nTemperature[%f]\nOrientation[%f,%f,%f]",
             acceleration[0], acceleration[1], acceleration[2],
             angular_rate[0], angular_rate[1], angular_rate[2],
             temperature, 
-            orientation[0], orientation[1], orientation[2],
-            position[0], position[1], position[2]);
+            orientation[0], orientation[1], orientation[2]);
 }
 
 char data_buffer[256] = {0};
@@ -126,7 +125,7 @@ static void udp_server_task(void *pvParameters)
                 }
                 else if (strcmp("get_imu", header) == 0)
                 {
-                    format_data(data_buffer, acceleration_mg, angular_rate_mdps, temperature_degC, position, orientation);
+                    format_data(data_buffer, acceleration_mg, angular_rate_mdps, temperature_degC, orientation);
                     sendto(sock, data_buffer, strlen(data_buffer), 0, (struct sockaddr *)&source_addr, sizeof(source_addr));
                 }                
                 else if (strcmp("set_led", header) == 0)

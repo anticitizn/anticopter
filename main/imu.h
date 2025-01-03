@@ -36,7 +36,20 @@
 
 #define LSM6DSR_SENSOR_ADDR 0x6B
 
-#define TARGET_BIAS_SAMPLES 1000
+//
+// Mahony filter constants and variables
+//
+#define RAD_TO_DEG (180.0f / M_PI)
+// Proportional gain for Mahony filter
+#define Kp 2.0f 
+// Integral gain for Mahony filter
+#define Ki 0.005f 
+
+// Quaternion for orientation representation
+static float q[4] = {1.0f, 0.0f, 0.0f, 0.0f};
+
+// Integral feedback
+static float integralFB[3] = {0.0f, 0.0f, 0.0f};
 
 static int16_t data_raw_acceleration[3];
 static int16_t data_raw_angular_rate[3];
@@ -44,14 +57,8 @@ static int16_t data_raw_temperature;
 static float acceleration_mg[3];
 static float angular_rate_mdps[3];
 static float temperature_degC;
-static float accel_bias[3] = {0};
-static float gyro_bias[3] = {0};
-static float accel_bias_temp[3] = {0};
-static float gyro_bias_temp[3] = {0};
-int bias_samples = 0;
-static float velocity[3];
-static float position[3];
 static float orientation[3];
+
 static int64_t last_time = 0;
 static uint8_t whoamI, rst;
 static uint8_t tx_buffer[1000];
@@ -129,41 +136,97 @@ static void platform_delay(uint32_t ms)
     vTaskDelay(ms / portTICK_PERIOD_MS); 
 }
 
-void calibrate_imu(float accel[3], float gyro[3])
+// Mahony filter
+void MahonyAHRSupdate(float gx, float gy, float gz, float ax, float ay, float az, float dt)
 {
-    if (bias_samples < TARGET_BIAS_SAMPLES)
+    float norm;
+    float vx, vy, vz;
+    float ex, ey, ez;
+
+    // Normalize accelerometer measurement
+    norm = sqrtf(ax * ax + ay * ay + az * az);
+    if (norm > 0.0f)
     {
-        for (int i = 0; i < 3; i++)
-        {
-            accel_bias_temp[i] += accel[i];
-            gyro_bias_temp[i] += gyro[i];
-        }
-        bias_samples += 1;
+        ax /= norm;
+        ay /= norm;
+        az /= norm;
+    }
+    else
+    {
+        return; // Skip update if accelerometer data invalid
     }
 
-    if (bias_samples == TARGET_BIAS_SAMPLES)
-    {
-        for (int i = 0; i < 3; i++)
-        {
-            accel_bias[i] = accel_bias_temp[i] / TARGET_BIAS_SAMPLES;
-            gyro_bias[i] = gyro_bias_temp[i] / TARGET_BIAS_SAMPLES;
-        }
+    // Estimated direction of gravity
+    vx = 2.0f * (q[1] * q[3] - q[0] * q[2]);
+    vy = 2.0f * (q[0] * q[1] + q[2] * q[3]);
+    vz = q[0] * q[0] - q[1] * q[1] - q[2] * q[2] + q[3] * q[3];
 
-        printf("\nAccel bias: %f, %f, %f\n", accel_bias[0], accel_bias[1], accel_bias[2]);
-        printf("\nGyro bias: %f, %f, %f\n", gyro_bias[0], gyro_bias[1], gyro_bias[2]);
+    // Error is cross-product between estimated and measured gravity
+    ex = (ay * vz - az * vy);
+    ey = (az * vx - ax * vz);
+    ez = (ax * vy - ay * vx);
+
+    // Apply integral feedback if Ki > 0
+    if (Ki > 0.0f)
+    {
+        integralFB[0] += Ki * ex * dt;
+        integralFB[1] += Ki * ey * dt;
+        integralFB[2] += Ki * ez * dt;
+
+        gx += integralFB[0];
+        gy += integralFB[1];
+        gz += integralFB[2];
     }
+
+    // Apply proportional feedback
+    gx += Kp * ex;
+    gy += Kp * ey;
+    gz += Kp * ez;
+
+    // Integrate rate of change of quaternion
+    gx *= 0.5f * dt;
+    gy *= 0.5f * dt;
+    gz *= 0.5f * dt;
+    float qDot1 = -q[1] * gx - q[2] * gy - q[3] * gz;
+    float qDot2 = q[0] * gx + q[2] * gz - q[3] * gy;
+    float qDot3 = q[0] * gy - q[1] * gz + q[3] * gx;
+    float qDot4 = q[0] * gz + q[1] * gy - q[2] * gx;
+
+    q[0] += qDot1;
+    q[1] += qDot2;
+    q[2] += qDot3;
+    q[3] += qDot4;
+
+    // Normalize quaternion
+    norm = sqrtf(q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3]);
+    q[0] /= norm;
+    q[1] /= norm;
+    q[2] /= norm;
+    q[3] /= norm;
 }
 
 void estimate_position_orientation(float accel[3], float gyro[3], double dt)
 {
-    for (int i = 0; i < 3; i++)
-    {
-        velocity[i] += accel[i] * dt;
-        position[i] += velocity[i] * dt;
-        orientation[i] += gyro[i] * dt;
-    }
+    // Convert gyro values from degrees per second to radians per second
+    float gyro_rad[3];
+    gyro_rad[0] = gyro[0] * M_PI / 180.0f;
+    gyro_rad[1] = gyro[1] * M_PI / 180.0f;
+    gyro_rad[2] = gyro[2] * M_PI / 180.0f;
 
-    printf("Position: [%f, %f, %f], Orientation: [%f, %f, %f], dt: %lf\n", position[0], position[1], position[2], orientation[0], orientation[1], orientation[2], dt);
+    // Apply Mahony filter to estimate orientation
+    MahonyAHRSupdate(gyro_rad[0], gyro_rad[1], gyro_rad[2], accel[0], accel[1], accel[2], dt);
+
+    // Convert quaternion to Euler angles (roll, pitch, yaw)
+    float roll = atan2f(2.0f * (q[0] * q[1] + q[2] * q[3]), 1.0f - 2.0f * (q[1] * q[1] + q[2] * q[2]));
+    float pitch = asinf(2.0f * (q[0] * q[2] - q[3] * q[1]));
+    float yaw = atan2f(2.0f * (q[0] * q[3] + q[1] * q[2]), 1.0f - 2.0f * (q[2] * q[2] + q[3] * q[3]));
+
+    orientation[0] = roll * RAD_TO_DEG;
+    orientation[1] = pitch * RAD_TO_DEG;
+    orientation[2] = yaw * RAD_TO_DEG;
+
+    printf("Orientation (Roll, Pitch, Yaw): [%f, %f, %f], dt: %lf\n",
+           orientation[0], orientation[1], orientation[2], dt);
 }
 
 void lsm6dsr_read_data_polling(void)
@@ -204,14 +267,17 @@ void lsm6dsr_read_data_polling(void)
     lsm6dsr_gy_data_rate_set(&dev_ctx, LSM6DSR_XL_ODR_104Hz);
 
     /* Set full scale */
-    lsm6dsr_xl_full_scale_set(&dev_ctx, LSM6DSR_2g);
+    lsm6dsr_xl_full_scale_set(&dev_ctx, LSM6DSR_4g);
     lsm6dsr_gy_full_scale_set(&dev_ctx, LSM6DSR_1000dps);
 
     /* Configure filtering chain(No aux interface)
      * Accelerometer - LPF1 + LPF2 path
      */
-    lsm6dsr_xl_hp_path_on_out_set(&dev_ctx, 0);
-    lsm6dsr_xl_filter_lp2_set(&dev_ctx, PROPERTY_DISABLE);
+    lsm6dsr_xl_hp_path_on_out_set(&dev_ctx, LSM6DSR_HP_PATH_DISABLE_ON_OUT);
+    lsm6dsr_xl_filter_lp2_set(&dev_ctx, PROPERTY_ENABLE);
+
+    lsm6dsr_gy_hp_path_internal_set(&dev_ctx, 0);
+    lsm6dsr_gy_filter_lp1_set(&dev_ctx, 1);
 
     /* Read samples in polling mode */
     while (1)
@@ -225,9 +291,9 @@ void lsm6dsr_read_data_polling(void)
             /* Read acceleration field data */
             memset(data_raw_acceleration, 0x00, 3 * sizeof(int16_t));
             lsm6dsr_acceleration_raw_get(&dev_ctx, data_raw_acceleration);
-            acceleration_mg[0] = lsm6dsr_from_fs2g_to_mg(data_raw_acceleration[0]) / 1000 - accel_bias[0];
-            acceleration_mg[1] = lsm6dsr_from_fs2g_to_mg(data_raw_acceleration[1]) / 1000 - accel_bias[1];
-            acceleration_mg[2] = lsm6dsr_from_fs2g_to_mg(data_raw_acceleration[2]) / 1000 - accel_bias[2];
+            acceleration_mg[0] = 9.81f * lsm6dsr_from_fs4g_to_mg(data_raw_acceleration[0]) / 1000;// - accel_bias[0];
+            acceleration_mg[1] = 9.81f * lsm6dsr_from_fs4g_to_mg(data_raw_acceleration[1]) / 1000;// - accel_bias[1];
+            acceleration_mg[2] = 9.81f * lsm6dsr_from_fs4g_to_mg(data_raw_acceleration[2]) / 1000;// - accel_bias[2];
             //printf("Acceleration [mg]:%4.2f\t%4.2f\t%4.2f\r\n", acceleration_mg[0], acceleration_mg[1], acceleration_mg[2]);
             tx_com(tx_buffer, strlen((char const *)tx_buffer));
         }
@@ -239,18 +305,14 @@ void lsm6dsr_read_data_polling(void)
             /* Read angular rate field data */
             memset(data_raw_angular_rate, 0x00, 3 * sizeof(int16_t));
             lsm6dsr_angular_rate_raw_get(&dev_ctx, data_raw_angular_rate);
-            angular_rate_mdps[0] = lsm6dsr_from_fs1000dps_to_mdps(data_raw_angular_rate[0]) / 1000 - gyro_bias[0];
-            angular_rate_mdps[1] = lsm6dsr_from_fs1000dps_to_mdps(data_raw_angular_rate[1]) / 1000 - gyro_bias[1];
-            angular_rate_mdps[2] = lsm6dsr_from_fs1000dps_to_mdps(data_raw_angular_rate[2]) / 1000 - gyro_bias[2];
+            angular_rate_mdps[0] = lsm6dsr_from_fs1000dps_to_mdps(data_raw_angular_rate[0]) / 1000; // - gyro_bias[0];
+            angular_rate_mdps[1] = lsm6dsr_from_fs1000dps_to_mdps(data_raw_angular_rate[1]) / 1000; // - gyro_bias[1];
+            angular_rate_mdps[2] = lsm6dsr_from_fs1000dps_to_mdps(data_raw_angular_rate[2]) / 1000; // - gyro_bias[2];
             //printf("Angular rate [mdps]:%4.2f\t%4.2f\t%4.2f\r\n", angular_rate_mdps[0], angular_rate_mdps[1], angular_rate_mdps[2]);
         }
 
         if (reg)
         {
-            if (bias_samples < TARGET_BIAS_SAMPLES)
-            {
-                calibrate_imu(acceleration_mg, angular_rate_mdps);
-            }
             
             if (!last_time)
             {
@@ -260,10 +322,7 @@ void lsm6dsr_read_data_polling(void)
             int64_t current_time = esp_timer_get_time();
             double dt = (double)(current_time - last_time) / 1000000;
 
-            if (bias_samples >= TARGET_BIAS_SAMPLES)
-            {
-                estimate_position_orientation(acceleration_mg, angular_rate_mdps, dt);
-            }
+            estimate_position_orientation(acceleration_mg, angular_rate_mdps, dt);
 
             last_time = current_time;
         }
@@ -280,7 +339,7 @@ void lsm6dsr_read_data_polling(void)
             tx_com(tx_buffer, strlen((char const *)tx_buffer));
         }
         
-        //cam_take_picture();
+        cam_take_picture();
     }
 }
 
