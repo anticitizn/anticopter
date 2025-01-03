@@ -29,7 +29,8 @@
     "udp.h": "c",
     "cstdlib": "c",
     "camera.h": "c",
-    "netdb.h": "c"
+    "netdb.h": "c",
+    "regex": "cpp"
   },
   "C_Cpp.errorSquiggles": "disabled",
   "idf.espIdfPath": "/home/danny/esp/esp-idf",

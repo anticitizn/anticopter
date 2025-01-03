@@ -36,12 +36,23 @@
 
 #define LSM6DSR_SENSOR_ADDR 0x6B
 
+#define TARGET_BIAS_SAMPLES 1000
+
 static int16_t data_raw_acceleration[3];
 static int16_t data_raw_angular_rate[3];
 static int16_t data_raw_temperature;
 static float acceleration_mg[3];
 static float angular_rate_mdps[3];
 static float temperature_degC;
+static float accel_bias[3] = {0};
+static float gyro_bias[3] = {0};
+static float accel_bias_temp[3] = {0};
+static float gyro_bias_temp[3] = {0};
+int bias_samples = 0;
+static float velocity[3];
+static float position[3];
+static float orientation[3];
+static int64_t last_time = 0;
 static uint8_t whoamI, rst;
 static uint8_t tx_buffer[1000];
 i2c_port_t i2cPort = I2C_MASTER_NUM;
@@ -118,6 +129,43 @@ static void platform_delay(uint32_t ms)
     vTaskDelay(ms / portTICK_PERIOD_MS); 
 }
 
+void calibrate_imu(float accel[3], float gyro[3])
+{
+    if (bias_samples < TARGET_BIAS_SAMPLES)
+    {
+        for (int i = 0; i < 3; i++)
+        {
+            accel_bias_temp[i] += accel[i];
+            gyro_bias_temp[i] += gyro[i];
+        }
+        bias_samples += 1;
+    }
+
+    if (bias_samples == TARGET_BIAS_SAMPLES)
+    {
+        for (int i = 0; i < 3; i++)
+        {
+            accel_bias[i] = accel_bias_temp[i] / TARGET_BIAS_SAMPLES;
+            gyro_bias[i] = gyro_bias_temp[i] / TARGET_BIAS_SAMPLES;
+        }
+
+        printf("\nAccel bias: %f, %f, %f\n", accel_bias[0], accel_bias[1], accel_bias[2]);
+        printf("\nGyro bias: %f, %f, %f\n", gyro_bias[0], gyro_bias[1], gyro_bias[2]);
+    }
+}
+
+void estimate_position_orientation(float accel[3], float gyro[3], double dt)
+{
+    for (int i = 0; i < 3; i++)
+    {
+        velocity[i] += accel[i] * dt;
+        position[i] += velocity[i] * dt;
+        orientation[i] += gyro[i] * dt;
+    }
+
+    printf("Position: [%f, %f, %f], Orientation: [%f, %f, %f], dt: %lf\n", position[0], position[1], position[2], orientation[0], orientation[1], orientation[2], dt);
+}
+
 void lsm6dsr_read_data_polling(void)
 {
     stmdev_ctx_t dev_ctx;
@@ -177,9 +225,9 @@ void lsm6dsr_read_data_polling(void)
             /* Read acceleration field data */
             memset(data_raw_acceleration, 0x00, 3 * sizeof(int16_t));
             lsm6dsr_acceleration_raw_get(&dev_ctx, data_raw_acceleration);
-            acceleration_mg[0] = lsm6dsr_from_fs2g_to_mg(data_raw_acceleration[0]);
-            acceleration_mg[1] = lsm6dsr_from_fs2g_to_mg(data_raw_acceleration[1]);
-            acceleration_mg[2] = lsm6dsr_from_fs2g_to_mg(data_raw_acceleration[2]);
+            acceleration_mg[0] = lsm6dsr_from_fs2g_to_mg(data_raw_acceleration[0]) / 1000 - accel_bias[0];
+            acceleration_mg[1] = lsm6dsr_from_fs2g_to_mg(data_raw_acceleration[1]) / 1000 - accel_bias[1];
+            acceleration_mg[2] = lsm6dsr_from_fs2g_to_mg(data_raw_acceleration[2]) / 1000 - accel_bias[2];
             //printf("Acceleration [mg]:%4.2f\t%4.2f\t%4.2f\r\n", acceleration_mg[0], acceleration_mg[1], acceleration_mg[2]);
             tx_com(tx_buffer, strlen((char const *)tx_buffer));
         }
@@ -191,13 +239,36 @@ void lsm6dsr_read_data_polling(void)
             /* Read angular rate field data */
             memset(data_raw_angular_rate, 0x00, 3 * sizeof(int16_t));
             lsm6dsr_angular_rate_raw_get(&dev_ctx, data_raw_angular_rate);
-            angular_rate_mdps[0] = lsm6dsr_from_fs1000dps_to_mdps(data_raw_angular_rate[0]);
-            angular_rate_mdps[1] = lsm6dsr_from_fs1000dps_to_mdps(data_raw_angular_rate[1]);
-            angular_rate_mdps[2] = lsm6dsr_from_fs1000dps_to_mdps(data_raw_angular_rate[2]);
+            angular_rate_mdps[0] = lsm6dsr_from_fs1000dps_to_mdps(data_raw_angular_rate[0]) / 1000 - gyro_bias[0];
+            angular_rate_mdps[1] = lsm6dsr_from_fs1000dps_to_mdps(data_raw_angular_rate[1]) / 1000 - gyro_bias[1];
+            angular_rate_mdps[2] = lsm6dsr_from_fs1000dps_to_mdps(data_raw_angular_rate[2]) / 1000 - gyro_bias[2];
             //printf("Angular rate [mdps]:%4.2f\t%4.2f\t%4.2f\r\n", angular_rate_mdps[0], angular_rate_mdps[1], angular_rate_mdps[2]);
         }
 
-        lsm6dsr_temp_flag_data_ready_get(&dev_ctx, &reg);
+        if (reg)
+        {
+            if (bias_samples < TARGET_BIAS_SAMPLES)
+            {
+                calibrate_imu(acceleration_mg, angular_rate_mdps);
+            }
+            
+            if (!last_time)
+            {
+                last_time = esp_timer_get_time();
+            }
+
+            int64_t current_time = esp_timer_get_time();
+            double dt = (double)(current_time - last_time) / 1000000;
+
+            if (bias_samples >= TARGET_BIAS_SAMPLES)
+            {
+                estimate_position_orientation(acceleration_mg, angular_rate_mdps, dt);
+            }
+
+            last_time = current_time;
+        }
+
+        lsm6dsr_temp_flag_data_ready_get(&dev_ctx, &reg);        
 
         if (reg)
         {
@@ -208,7 +279,7 @@ void lsm6dsr_read_data_polling(void)
             //printf("Temperature [degC]:%6.2f\r\n", temperature_degC);
             tx_com(tx_buffer, strlen((char const *)tx_buffer));
         }
-
+        
         //cam_take_picture();
     }
 }
