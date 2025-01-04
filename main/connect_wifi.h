@@ -20,8 +20,8 @@
 int wifi_connect_status = 0;
 int s_retry_num = 0;
 
-#define WIFI_SSID "VIVACOM-A0DB"
-#define WIFI_PASSWORD "adminadmin"
+#define WIFI_SSID "AIRCONDITIONER"
+#define WIFI_PASSWORD "12345678"
 #define MAXIMUM_RETRY 5
 /* FreeRTOS event group to signal when we are connected*/
 EventGroupHandle_t s_wifi_event_group;
@@ -65,6 +65,13 @@ static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_
 
 void connect_wifi(void)
 {
+    esp_err_t ret = esp_wifi_set_bandwidth(WIFI_IF_STA, WIFI_BW_HT40);
+    if (ret == ESP_OK) {
+        printf("Wi-Fi bandwidth set to 40 MHz\n");
+    } else {
+        printf("Failed to set Wi-Fi bandwidth: %s\n", esp_err_to_name(ret));
+    }
+    
     s_wifi_event_group = xEventGroupCreate();
 
     ESP_ERROR_CHECK(esp_netif_init());

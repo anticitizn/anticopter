@@ -31,7 +31,11 @@
     "camera.h": "c",
     "netdb.h": "c",
     "regex": "cpp",
-    "esp_log.h": "c"
+    "esp_log.h": "c",
+    "event_groups.h": "c",
+    "sys.h": "c",
+    "esp_pm.h": "c",
+    "imu.h": "c"
   },
   "C_Cpp.errorSquiggles": "disabled",
   "idf.espIdfPath": "/home/danny/esp/esp-idf",

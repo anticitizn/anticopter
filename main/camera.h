@@ -9,7 +9,7 @@
 #include <esp_timer.h>
 #include <esp_log.h>
 
-#define CONFIG_XCLK_FREQ 15000000
+#define CONFIG_XCLK_FREQ 20000000
 
 // Camera pins
 #define CAM_PIN_PWDN -1  // power down is not used
@@ -58,7 +58,7 @@ static esp_err_t init_camera(void)
                                      .ledc_channel = LEDC_CHANNEL_0,
 
                                      .pixel_format = PIXFORMAT_JPEG,
-                                     .frame_size = FRAMESIZE_VGA,
+                                     .frame_size = FRAMESIZE_HD,
 
                                      .jpeg_quality = 10,
                                      .fb_count = 2,
