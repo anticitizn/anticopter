@@ -20,40 +20,33 @@
 
 #define PORT 3333
 
-typedef struct 
-{
-    uint8_t cam_data[60000];
-    int16_t imu_data[7];
-} drone_out;
-
 typedef struct
 {
-    uint32_t motors[4];
-    uint32_t lights[4][3];
-} drone_in;
+    char imu_data[256];
+    uint8_t cam_data[128000];
+} telemetry;
 
-drone_out data_out = {0};
-drone_in data_in = {0};
+telemetry data_out = {0};
 
 // 16kb rx buffer
 char rx_buffer[16000];
 char *header = rx_buffer;
 char *payload = rx_buffer + 128;
 
+char data_buffer[256] = {0};
+bool connected = 0;
+int sock;
+struct sockaddr_storage source_addr;
+
 // Function to format the data into a string
 void format_data(char *buffer, float *acceleration, float *angular_rate, float temperature, float *orientation) {
     // Assuming the format "Acceleration[X,Y,Z];AngularRate[X,Y,Z];Temperature[T];"
-    sprintf(buffer, "\nAcceleration[%f,%f,%f]\nAngularRate[%f,%f,%f]\nOrientation[%f,%f,%f]\nTemperature[%f]",
+    sprintf(buffer, "\nAcceleration[%f,%f,%f]\nAngularRate[%f,%f,%f]\nOrientation[%f,%f,%f]\nTemperature[%f]\n",
             acceleration[0], acceleration[1], acceleration[2],
             angular_rate[0], angular_rate[1], angular_rate[2],
             orientation[0], orientation[1], orientation[2],
             temperature);
 }
-
-char data_buffer[256] = {0};
-bool connected = 0;
-int sock;
-struct sockaddr_storage source_addr;
 
 static void udp_server_task(void *pvParameters)
 {
@@ -119,13 +112,18 @@ static void udp_server_task(void *pvParameters)
                 ESP_LOGI(TAG, "Header: %s", header);
                 ESP_LOGI(TAG, "Payload: %s", payload);
                 
-                if (strcmp("get_camera", header) == 0)
+                if (strcmp("get_telemetry", header) == 0)
+                {
+                    format_data(data_out.imu_data, acceleration_mg, angular_rate_mdps, temperature_degC, orientation);
+                    memcpy(data_out.cam_data, _jpg_buf, _jpg_buf_len);
+                    sendto(sock, &data_out, sizeof(data_out), 0, (struct sockaddr *)&source_addr, sizeof(source_addr));
+                }
+                else if (strcmp("get_camera", header) == 0)
                 {
                     sendto(sock, _jpg_buf, _jpg_buf_len, 0, (struct sockaddr *)&source_addr, sizeof(source_addr));
                 }
                 else if (strcmp("get_imu", header) == 0)
                 {
-                    format_data(data_buffer, acceleration_mg, angular_rate_mdps, temperature_degC, orientation);
                     sendto(sock, data_buffer, strlen(data_buffer), 0, (struct sockaddr *)&source_addr, sizeof(source_addr));
                 }                
                 else if (strcmp("set_led", header) == 0)

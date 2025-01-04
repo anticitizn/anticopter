@@ -30,7 +30,8 @@
     "cstdlib": "c",
     "camera.h": "c",
     "netdb.h": "c",
-    "regex": "cpp"
+    "regex": "cpp",
+    "esp_log.h": "c"
   },
   "C_Cpp.errorSquiggles": "disabled",
   "idf.espIdfPath": "/home/danny/esp/esp-idf",
