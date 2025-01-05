@@ -128,7 +128,7 @@ static void udp_server_task(void *pvParameters)
                     int64_t end_time = esp_timer_get_time(); // Get the end time in microseconds
 
                     // Calculate the elapsed time in milliseconds
-                    double elapsed_time_ms = (end_time - start_time) / 1000;
+                    double elapsed_time_ms = (double)(end_time - start_time) / 1000;
 
                     // Print the elapsed time
                     printf("Time taken for execution: %lf ms\n", elapsed_time_ms);
@@ -161,6 +161,17 @@ static void udp_server_task(void *pvParameters)
                     {
                         ESP_LOGI(TAG, "Failed to extract LED data from the payload!");
                     }
+                }
+                else if (strcmp("set_res_vga", header) == 0)
+                {
+                    printf("Setting RES to VGA!\n\n");
+                    sensor_t *sensor = esp_camera_sensor_get();
+                    sensor->set_framesize(sensor, FRAMESIZE_VGA);
+                }
+                else if (strcmp("set_res_hd", header) == 0)
+                {
+                    sensor_t *sensor = esp_camera_sensor_get();
+                    sensor->set_framesize(sensor, FRAMESIZE_HD);
                 }
             }
 

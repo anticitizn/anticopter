@@ -58,7 +58,7 @@ static esp_err_t init_camera(void)
                                      .ledc_channel = LEDC_CHANNEL_0,
 
                                      .pixel_format = PIXFORMAT_JPEG,
-                                     .frame_size = FRAMESIZE_HD,
+                                     .frame_size = FRAMESIZE_VGA,
 
                                      .jpeg_quality = 10,
                                      .fb_count = 2,
@@ -68,6 +68,11 @@ static esp_err_t init_camera(void)
     {
         return err;
     }
+
+    sensor_t *sensor = esp_camera_sensor_get();
+    sensor->set_vflip(sensor, true);
+    sensor->set_hmirror(sensor, true);
+
     return ESP_OK;
 }
 
