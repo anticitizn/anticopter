@@ -1,3 +1,7 @@
+
+#ifndef ANTICOPTER_MOTORS
+#define ANTICOPTER_MOTORS
+
 #include "driver/gpio.h"
 #include "driver/ledc.h"
 #include "freertos/FreeRTOS.h"
@@ -74,6 +78,16 @@ void motors_pwm(int duty_cycle)
     }
 }
 
+// duty_cicle is in percentages, between 0 and 100
+void motor_pwm(int motor, int duty_cycle)
+{
+    // Set duty cycle to 5%
+    ledc_set_duty(LEDC_LOW_SPEED_MODE, PWM_CHANNEL_BASE + motor, duty_cycle * ((1 << LEDC_TIMER_13_BIT) - 1) / 100);
+    ledc_update_duty(LEDC_LOW_SPEED_MODE, PWM_CHANNEL_BASE + motor);
+
+    vTaskDelay(10 / portTICK_PERIOD_MS);
+}
+
 void pwm_motors_main()
 {
     setup_pwm();
@@ -101,3 +115,5 @@ void pwm_motors_main()
 
     vTaskDelete(NULL); // This task does not need to run continuously
 }
+
+#endif

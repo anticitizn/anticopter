@@ -15,6 +15,7 @@
 #include <lwip/netdb.h>
 
 #include "imu.h"
+#include "pwm_control.h"
 //#include "camera.h"
 #include "led.h"
 
@@ -172,6 +173,23 @@ static void udp_server_task(void *pvParameters)
                 {
                     sensor_t *sensor = esp_camera_sensor_get();
                     sensor->set_framesize(sensor, FRAMESIZE_HD);
+                }
+                else if (strcmp("set_motors", header) == 0)
+                {
+                    int mot0, mot1, mot2, mot3;
+
+                    if (sscanf(payload, "%d %d %d %d", &mot0, &mot1, &mot2, &mot3) == 4)
+                    {
+                        motor_pwm(0, mot0);
+                        motor_pwm(1, mot1);
+                        motor_pwm(2, mot2);
+                        motor_pwm(3, mot3);
+                        ESP_LOGI(TAG, "MOTORS: %d, %d, %d, %d", mot0, mot1, mot2, mot3);
+                    } 
+                    else 
+                    {
+                        ESP_LOGI(TAG, "Failed to extract motor data from the payload!");
+                    }
                 }
             }
 

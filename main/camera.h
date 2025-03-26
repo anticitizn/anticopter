@@ -58,7 +58,7 @@ static esp_err_t init_camera(void)
                                      .ledc_channel = LEDC_CHANNEL_0,
 
                                      .pixel_format = PIXFORMAT_JPEG,
-                                     .frame_size = FRAMESIZE_VGA,
+                                     .frame_size = FRAMESIZE_HD,
 
                                      .jpeg_quality = 10,
                                      .fb_count = 2,
@@ -110,7 +110,7 @@ void cam_take_picture()
                 1000.0 / (unsigned int)frame_time);
 
 
-    last_frame = 0;
+    last_frame = 0;    
 }
 
 #endif
