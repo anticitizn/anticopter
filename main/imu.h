@@ -225,8 +225,8 @@ void estimate_position_orientation(float accel[3], float gyro[3], double dt)
     orientation[1] = pitch * RAD_TO_DEG;
     orientation[2] = yaw * RAD_TO_DEG;
 
-    printf("Orientation (Roll, Pitch, Yaw): [%f, %f, %f], dt: %lf\n",
-           orientation[0], orientation[1], orientation[2], dt);
+    //printf("Orientation (Roll, Pitch, Yaw): [%f, %f, %f], dt: %lf\n",
+    //       orientation[0], orientation[1], orientation[2], dt);
 }
 
 void lsm6dsr_read_data_polling(void)
