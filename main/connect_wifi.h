@@ -1,3 +1,4 @@
+
 #ifndef ANTICOPTER_WIFI
 #define ANTICOPTER_WIFI
 
@@ -20,109 +21,73 @@
 int wifi_connect_status = 0;
 int s_retry_num = 0;
 
-#define WIFI_SSID "KIMCHILOVERS"
-#define WIFI_PASSWORD "lovekimchi"
-#define MAXIMUM_RETRY 10
-/* FreeRTOS event group to signal when we are connected*/
-EventGroupHandle_t s_wifi_event_group;
+// The drone's IP should be 192.168.4.1
+#define WIFI_SSID "ANTICOPTER"
+#define WIFI_PASSWORD ""
+#define WIFI_MAX_STA_CONN 2 // How many devices are allowed to connect to the SoftAP statiom
+#define WIFI_CHANNEL 1 // WiFi channel 1-13
 
-/* The event group allows multiple bits for each event, but we only care about two events:
- * - we are connected to the AP with an IP
- * - we failed to connect after the maximum amount of retries */
-#define WIFI_CONNECTED_BIT BIT0
-#define WIFI_FAIL_BIT BIT1
-
-static void event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data)
+static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data)
 {
-    if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START)
+    if (event_id == WIFI_EVENT_AP_STACONNECTED) 
     {
-        esp_wifi_connect();
-    }
-    else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED)
+        wifi_event_ap_staconnected_t* event = (wifi_event_ap_staconnected_t*) event_data;
+    } 
+    else if (event_id == WIFI_EVENT_AP_STADISCONNECTED) 
     {
-        if (s_retry_num < MAXIMUM_RETRY)
-        {
-            esp_wifi_connect();
-            s_retry_num++;
-            ESP_LOGI(TAG, "retry to connect to the AP");
-        }
-        else
-        {
-            xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
-        }
-        wifi_connect_status = 0;
-        ESP_LOGI(TAG, "connect to the AP fail");
-    }
-    else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP)
-    {
-        ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
-        ESP_LOGI(TAG, "got ip:" IPSTR, IP2STR(&event->ip_info.ip));
-        s_retry_num = 0;
-        xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
-        wifi_connect_status = 1;
+        wifi_event_ap_stadisconnected_t* event = (wifi_event_ap_stadisconnected_t*) event_data;
     }
 }
 
-void connect_wifi(void)
+void wifi_init_softap(void)
 {
-    esp_err_t ret = esp_wifi_set_bandwidth(WIFI_IF_STA, WIFI_BW_HT40);
-    if (ret == ESP_OK) {
-        printf("Wi-Fi bandwidth set to 40 MHz\n");
-    } else {
-        printf("Failed to set Wi-Fi bandwidth: %s\n", esp_err_to_name(ret));
-    }
-    
-    s_wifi_event_group = xEventGroupCreate();
-
     ESP_ERROR_CHECK(esp_netif_init());
-
     ESP_ERROR_CHECK(esp_event_loop_create_default());
-    esp_netif_create_default_wifi_sta();
+    esp_netif_create_default_wifi_ap();
 
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
 
-    esp_event_handler_instance_t instance_any_id;
-    esp_event_handler_instance_t instance_got_ip;
-    ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &event_handler, NULL, &instance_any_id));
-    ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &event_handler, NULL, &instance_got_ip));
+    ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
+                                                        ESP_EVENT_ANY_ID,
+                                                        &wifi_event_handler,
+                                                        NULL,
+                                                        NULL));
 
     wifi_config_t wifi_config = {
-        .sta =
-            {
-                .ssid = WIFI_SSID,
-                .password = WIFI_PASSWORD,
-                /* Setting a password implies station will connect to all security modes including WEP/WPA.
-                 * However these modes are deprecated and not advisable to be used. Incase your Access point
-                 * doesn't support WPA2, these mode can be enabled by commenting below line */
-                .threshold.authmode = WIFI_AUTH_WPA2_PSK,
+        .ap = {
+            .ssid = WIFI_SSID,
+            .ssid_len = strlen(WIFI_SSID),
+            .channel = WIFI_CHANNEL,
+            .password = WIFI_PASSWORD,
+            .max_connection = WIFI_MAX_STA_CONN,
+#ifdef CONFIG_ESP_WIFI_SOFTAP_SAE_SUPPORT
+            .authmode = WIFI_AUTH_WPA3_PSK,
+            .sae_pwe_h2e = WPA3_SAE_PWE_BOTH,
+#else /* CONFIG_ESP_WIFI_SOFTAP_SAE_SUPPORT */
+            .authmode = WIFI_AUTH_WPA2_PSK,
+#endif
+            .pmf_cfg = {
+                    .required = true,
             },
+#ifdef CONFIG_ESP_WIFI_BSS_MAX_IDLE_SUPPORT
+            .bss_max_idle_cfg = {
+                .period = WIFI_AP_DEFAULT_MAX_IDLE_PERIOD,
+                .protected_keep_alive = 1,
+            },
+#endif
+        },
     };
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
+    if (strlen(WIFI_PASSWORD) == 0) 
+    {
+        wifi_config.ap.authmode = WIFI_AUTH_OPEN;
+    }
+
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
+    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_config));
     ESP_ERROR_CHECK(esp_wifi_start());
 
-    ESP_LOGI(TAG, "wifi_init_sta finished.");
-
-    /* Waiting until either the connection is established (WIFI_CONNECTED_BIT) or connection failed for the maximum
-     * number of re-tries (WIFI_FAIL_BIT). The bits are set by event_handler() (see above) */
-    EventBits_t bits = xEventGroupWaitBits(s_wifi_event_group, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT, pdFALSE, pdFALSE, portMAX_DELAY);
-
-    /* xEventGroupWaitBits() returns the bits before the call returned, hence we can test which event actually
-     * happened. */
-    if (bits & WIFI_CONNECTED_BIT)
-    {
-        ESP_LOGI(TAG, "connected to ap SSID:%s password:%s", WIFI_SSID, WIFI_PASSWORD);
-    }
-    else if (bits & WIFI_FAIL_BIT)
-    {
-        ESP_LOGI(TAG, "Failed to connect to SSID:%s, password:%s", WIFI_SSID, WIFI_PASSWORD);
-    }
-    else
-    {
-        ESP_LOGE(TAG, "UNEXPECTED EVENT");
-    }
-    vEventGroupDelete(s_wifi_event_group);
+    ESP_LOGI(TAG, "wifi_init_softap finished. SSID:%s password:%s channel:%d", WIFI_SSID, WIFI_PASSWORD, WIFI_CHANNEL);
 }
 
 #endif

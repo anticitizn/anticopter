@@ -49,21 +49,17 @@ void app_main()
         ret = nvs_flash_init();
     }
 
-    connect_wifi();
+    wifi_init_softap();
 
-    if (wifi_connect_status)
+    err = init_camera();
+    if (err != ESP_OK)
     {
-        err = init_camera();
-        if (err != ESP_OK)
-        {
-            printf("err: %s\n", esp_err_to_name(err));
-            return;
-        }
-        //setup_server();
-        xTaskCreatePinnedToCore(lsm6dsr_read_data_polling, "imu_polling", 4096, NULL, 5, NULL, 0);
-        xTaskCreatePinnedToCore(udp_server_task, "udp_server", 4096, (void*)AF_INET, 5, NULL, 1);
-        ESP_LOGI(TAG, "ESP32 CAM Web Server is up and running\n");
+        printf("err: %s\n", esp_err_to_name(err));
+        return;
     }
-    else
-        ESP_LOGI(TAG, "Failed to connected with Wi-Fi, check your network Credentials\n");
+
+    xTaskCreatePinnedToCore(lsm6dsr_read_data_polling, "imu_polling", 4096, NULL, 5, NULL, 0);
+    xTaskCreatePinnedToCore(udp_server_task, "udp_server", 4096, (void*)AF_INET, 5, NULL, 1);
+    ESP_LOGI(TAG, "Anticopter software is up and running\n");
+    
 }
