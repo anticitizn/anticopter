@@ -13,10 +13,10 @@
 #define MOTOR_GPIO_3 41
 #define MOTOR_GPIO_4 42
 
-#define PWM_CHANNEL_BASE LEDC_CHANNEL_0
-#define PWM_TIMER_BASE LEDC_TIMER_0
-#define PWM_FREQ_HZ 1000
-#define PWM_RESOLUTION LEDC_TIMER_13_BIT
+#define PWM_CHANNEL_BASE LEDC_CHANNEL_1
+#define PWM_TIMER_BASE LEDC_TIMER_1
+#define PWM_FREQ_HZ 40000
+#define PWM_RESOLUTION LEDC_TIMER_10_BIT
 
 void setup_pwm()
 {
@@ -65,27 +65,27 @@ void motors_off()
     }
 }
 
-// duty_cicle is in percentages, between 0 and 100
+// duty_cycle is in percentages, between 0 and 100
 void motors_pwm(int duty_cycle)
 {
     for (int i = 0; i < 4; i++)
     {
-        // Set duty cycle to 5%
+        // Set duty cycle
         ledc_set_duty(LEDC_LOW_SPEED_MODE, PWM_CHANNEL_BASE + i, duty_cycle * ((1 << LEDC_TIMER_13_BIT) - 1) / 100);
         ledc_update_duty(LEDC_LOW_SPEED_MODE, PWM_CHANNEL_BASE + i);
 
-        vTaskDelay(10 / portTICK_PERIOD_MS);
+        //vTaskDelay(10 / portTICK_PERIOD_MS);
     }
 }
 
-// duty_cicle is in percentages, between 0 and 100
+// duty_cycle is in percentages, between 0 and 100
 void motor_pwm(int motor, int duty_cycle)
 {
-    // Set duty cycle to 5%
+    // Set duty cycle
     ledc_set_duty(LEDC_LOW_SPEED_MODE, PWM_CHANNEL_BASE + motor, duty_cycle * ((1 << LEDC_TIMER_13_BIT) - 1) / 100);
     ledc_update_duty(LEDC_LOW_SPEED_MODE, PWM_CHANNEL_BASE + motor);
 
-    vTaskDelay(10 / portTICK_PERIOD_MS);
+    //vTaskDelay(10 / portTICK_PERIOD_MS);
 }
 
 void pwm_motors_main()

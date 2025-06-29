@@ -231,113 +231,113 @@ void estimate_position_orientation(float accel[3], float gyro[3], double dt)
 
 void lsm6dsr_read_data_polling(void)
 {
-    stmdev_ctx_t dev_ctx;
-    /* Initialize mems driver interface */
-    dev_ctx.write_reg = platform_write;
-    dev_ctx.read_reg = platform_read;
-    dev_ctx.mdelay = platform_delay;
-    dev_ctx.handle = &i2cPort;
-    /* Init test platform */
-    platform_init();
-    /* Wait sensor boot time */
-    platform_delay(10);
-    /* Check device ID */
-    lsm6dsr_device_id_get(&dev_ctx, &whoamI);
+    // stmdev_ctx_t dev_ctx;
+    // /* Initialize mems driver interface */
+    // dev_ctx.write_reg = platform_write;
+    // dev_ctx.read_reg = platform_read;
+    // dev_ctx.mdelay = platform_delay;
+    // dev_ctx.handle = &i2cPort;
+    // /* Init test platform */
+    // platform_init();
+    // /* Wait sensor boot time */
+    // platform_delay(10);
+    // /* Check device ID */
+    // lsm6dsr_device_id_get(&dev_ctx, &whoamI);
 
-    if (whoamI != LSM6DSR_ID)
-        while (1)
-            ;
+    // if (whoamI != LSM6DSR_ID)
+    //     while (1)
+    //         ;
 
-    /* Restore default configuration */
-    lsm6dsr_reset_set(&dev_ctx, PROPERTY_ENABLE);
+    // /* Restore default configuration */
+    // lsm6dsr_reset_set(&dev_ctx, PROPERTY_ENABLE);
 
-    do
-    {
-        lsm6dsr_reset_get(&dev_ctx, &rst);
-    } while (rst);
+    // do
+    // {
+    //     lsm6dsr_reset_get(&dev_ctx, &rst);
+    // } while (rst);
 
-    /* Disable I3C interface */
-    lsm6dsr_i3c_disable_set(&dev_ctx, LSM6DSR_I3C_DISABLE);
+    // /* Disable I3C interface */
+    // lsm6dsr_i3c_disable_set(&dev_ctx, LSM6DSR_I3C_DISABLE);
 
-    /* Enable Block Data Update */
-    lsm6dsr_block_data_update_set(&dev_ctx, PROPERTY_ENABLE);
+    // /* Enable Block Data Update */
+    // lsm6dsr_block_data_update_set(&dev_ctx, PROPERTY_ENABLE);
 
-    /* Set Output Data Rate */
-    lsm6dsr_xl_data_rate_set(&dev_ctx, LSM6DSR_XL_ODR_104Hz);
-    lsm6dsr_gy_data_rate_set(&dev_ctx, LSM6DSR_XL_ODR_104Hz);
+    // /* Set Output Data Rate */
+    // lsm6dsr_xl_data_rate_set(&dev_ctx, LSM6DSR_XL_ODR_104Hz);
+    // lsm6dsr_gy_data_rate_set(&dev_ctx, LSM6DSR_XL_ODR_104Hz);
 
-    /* Set full scale */
-    lsm6dsr_xl_full_scale_set(&dev_ctx, LSM6DSR_4g);
-    lsm6dsr_gy_full_scale_set(&dev_ctx, LSM6DSR_1000dps);
+    // /* Set full scale */
+    // lsm6dsr_xl_full_scale_set(&dev_ctx, LSM6DSR_4g);
+    // lsm6dsr_gy_full_scale_set(&dev_ctx, LSM6DSR_1000dps);
 
-    /* Configure filtering chain(No aux interface)
-     * Accelerometer - LPF1 + LPF2 path
-     */
-    lsm6dsr_xl_hp_path_on_out_set(&dev_ctx, LSM6DSR_HP_PATH_DISABLE_ON_OUT);
-    lsm6dsr_xl_filter_lp2_set(&dev_ctx, PROPERTY_ENABLE);
+    // /* Configure filtering chain(No aux interface)
+    //  * Accelerometer - LPF1 + LPF2 path
+    //  */
+    // lsm6dsr_xl_hp_path_on_out_set(&dev_ctx, LSM6DSR_HP_PATH_DISABLE_ON_OUT);
+    // lsm6dsr_xl_filter_lp2_set(&dev_ctx, PROPERTY_ENABLE);
 
-    lsm6dsr_gy_hp_path_internal_set(&dev_ctx, 0);
-    lsm6dsr_gy_filter_lp1_set(&dev_ctx, 1);
+    // lsm6dsr_gy_hp_path_internal_set(&dev_ctx, 0);
+    // lsm6dsr_gy_filter_lp1_set(&dev_ctx, 1);
 
     /* Read samples in polling mode */
     while (1)
     {
-        uint8_t reg;
-        /* Read output only if new xl value is available */
-        lsm6dsr_xl_flag_data_ready_get(&dev_ctx, &reg);
+        // uint8_t reg;
+        // /* Read output only if new xl value is available */
+        // lsm6dsr_xl_flag_data_ready_get(&dev_ctx, &reg);
 
-        if (reg)
-        {
-            /* Read acceleration field data */
-            memset(data_raw_acceleration, 0x00, 3 * sizeof(int16_t));
-            lsm6dsr_acceleration_raw_get(&dev_ctx, data_raw_acceleration);
-            acceleration_mg[0] = 9.81f * lsm6dsr_from_fs4g_to_mg(data_raw_acceleration[0]) / 1000;// - accel_bias[0];
-            acceleration_mg[1] = 9.81f * lsm6dsr_from_fs4g_to_mg(data_raw_acceleration[1]) / 1000;// - accel_bias[1];
-            acceleration_mg[2] = 9.81f * lsm6dsr_from_fs4g_to_mg(data_raw_acceleration[2]) / 1000;// - accel_bias[2];
-            //printf("Acceleration [mg]:%4.2f\t%4.2f\t%4.2f\r\n", acceleration_mg[0], acceleration_mg[1], acceleration_mg[2]);
-            tx_com(tx_buffer, strlen((char const *)tx_buffer));
-        }
+        // if (reg)
+        // {
+        //     /* Read acceleration field data */
+        //     memset(data_raw_acceleration, 0x00, 3 * sizeof(int16_t));
+        //     lsm6dsr_acceleration_raw_get(&dev_ctx, data_raw_acceleration);
+        //     acceleration_mg[0] = 9.81f * lsm6dsr_from_fs4g_to_mg(data_raw_acceleration[0]) / 1000;// - accel_bias[0];
+        //     acceleration_mg[1] = 9.81f * lsm6dsr_from_fs4g_to_mg(data_raw_acceleration[1]) / 1000;// - accel_bias[1];
+        //     acceleration_mg[2] = 9.81f * lsm6dsr_from_fs4g_to_mg(data_raw_acceleration[2]) / 1000;// - accel_bias[2];
+        //     //printf("Acceleration [mg]:%4.2f\t%4.2f\t%4.2f\r\n", acceleration_mg[0], acceleration_mg[1], acceleration_mg[2]);
+        //     tx_com(tx_buffer, strlen((char const *)tx_buffer));
+        // }
 
-        lsm6dsr_gy_flag_data_ready_get(&dev_ctx, &reg);
+        // lsm6dsr_gy_flag_data_ready_get(&dev_ctx, &reg);
 
-        if (reg)
-        {
-            /* Read angular rate field data */
-            memset(data_raw_angular_rate, 0x00, 3 * sizeof(int16_t));
-            lsm6dsr_angular_rate_raw_get(&dev_ctx, data_raw_angular_rate);
-            angular_rate_mdps[0] = lsm6dsr_from_fs1000dps_to_mdps(data_raw_angular_rate[0]) / 1000; // - gyro_bias[0];
-            angular_rate_mdps[1] = lsm6dsr_from_fs1000dps_to_mdps(data_raw_angular_rate[1]) / 1000; // - gyro_bias[1];
-            angular_rate_mdps[2] = lsm6dsr_from_fs1000dps_to_mdps(data_raw_angular_rate[2]) / 1000; // - gyro_bias[2];
-            //printf("Angular rate [mdps]:%4.2f\t%4.2f\t%4.2f\r\n", angular_rate_mdps[0], angular_rate_mdps[1], angular_rate_mdps[2]);
-        }
+        // if (reg)
+        // {
+        //     /* Read angular rate field data */
+        //     memset(data_raw_angular_rate, 0x00, 3 * sizeof(int16_t));
+        //     lsm6dsr_angular_rate_raw_get(&dev_ctx, data_raw_angular_rate);
+        //     angular_rate_mdps[0] = lsm6dsr_from_fs1000dps_to_mdps(data_raw_angular_rate[0]) / 1000; // - gyro_bias[0];
+        //     angular_rate_mdps[1] = lsm6dsr_from_fs1000dps_to_mdps(data_raw_angular_rate[1]) / 1000; // - gyro_bias[1];
+        //     angular_rate_mdps[2] = lsm6dsr_from_fs1000dps_to_mdps(data_raw_angular_rate[2]) / 1000; // - gyro_bias[2];
+        //     //printf("Angular rate [mdps]:%4.2f\t%4.2f\t%4.2f\r\n", angular_rate_mdps[0], angular_rate_mdps[1], angular_rate_mdps[2]);
+        // }
 
-        if (reg)
-        {
+        // if (reg)
+        // {
             
-            if (!last_time)
-            {
-                last_time = esp_timer_get_time();
-            }
+        //     if (!last_time)
+        //     {
+        //         last_time = esp_timer_get_time();
+        //     }
 
-            int64_t current_time = esp_timer_get_time();
-            double dt = (double)(current_time - last_time) / 1000000;
+        //     int64_t current_time = esp_timer_get_time();
+        //     double dt = (double)(current_time - last_time) / 1000000;
 
-            estimate_position_orientation(acceleration_mg, angular_rate_mdps, dt);
+        //     estimate_position_orientation(acceleration_mg, angular_rate_mdps, dt);
 
-            last_time = current_time;
-        }
+        //     last_time = current_time;
+        // }
 
-        lsm6dsr_temp_flag_data_ready_get(&dev_ctx, &reg);        
+        // lsm6dsr_temp_flag_data_ready_get(&dev_ctx, &reg);        
 
-        if (reg)
-        {
-            /* Read temperature data */
-            memset(&data_raw_temperature, 0x00, sizeof(int16_t));
-            lsm6dsr_temperature_raw_get(&dev_ctx, &data_raw_temperature);
-            temperature_degC = lsm6dsr_from_lsb_to_celsius(data_raw_temperature);
-            //printf("Temperature [degC]:%6.2f\r\n", temperature_degC);
-            tx_com(tx_buffer, strlen((char const *)tx_buffer));
-        }
+        // if (reg)
+        // {
+        //     /* Read temperature data */
+        //     memset(&data_raw_temperature, 0x00, sizeof(int16_t));
+        //     lsm6dsr_temperature_raw_get(&dev_ctx, &data_raw_temperature);
+        //     temperature_degC = lsm6dsr_from_lsb_to_celsius(data_raw_temperature);
+        //     //printf("Temperature [degC]:%6.2f\r\n", temperature_degC);
+        //     tx_com(tx_buffer, strlen((char const *)tx_buffer));
+        // }
         
         cam_take_picture();
     }

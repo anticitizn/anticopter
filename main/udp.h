@@ -189,6 +189,7 @@ static void udp_server_task(void *pvParameters)
                     else 
                     {
                         ESP_LOGI(TAG, "Failed to extract motor data from the payload!");
+                        ESP_LOGI(TAG, "PAYLOAD: %s", payload);
                     }
                 }
             }

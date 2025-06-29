@@ -22,7 +22,7 @@ int s_retry_num = 0;
 
 #define WIFI_SSID "KIMCHILOVERS"
 #define WIFI_PASSWORD "lovekimchi"
-#define MAXIMUM_RETRY 5
+#define MAXIMUM_RETRY 10
 /* FreeRTOS event group to signal when we are connected*/
 EventGroupHandle_t s_wifi_event_group;
 
