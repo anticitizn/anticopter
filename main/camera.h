@@ -58,7 +58,7 @@ static esp_err_t init_camera(void)
                                      .ledc_channel = LEDC_CHANNEL_0,
 
                                      .pixel_format = PIXFORMAT_JPEG,
-                                     .frame_size = FRAMESIZE_SVGA,
+                                     .frame_size = FRAMESIZE_HD,
 
                                      .jpeg_quality = 10,
                                      .fb_count = 2,

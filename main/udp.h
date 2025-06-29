@@ -133,6 +133,7 @@ static void udp_server_task(void *pvParameters)
 
                     // Print the elapsed time
                     printf("Time taken for execution: %lf ms\n", elapsed_time_ms);
+                    printf("Size: %d b\n", _jpg_buf_len);
                 }
                 else if (strcmp("get_imu", header) == 0)
                 {
