@@ -9,6 +9,12 @@
 #include <esp_timer.h>
 #include <esp_log.h>
 
+#include "esp_vfs_fat.h"
+#include "driver/sdmmc_host.h"
+#include "driver/sdmmc_defs.h"
+#include "sdmmc_cmd.h"
+
+
 #define CONFIG_XCLK_FREQ 20000000
 
 // Camera pins
@@ -32,6 +38,58 @@
 
 size_t _jpg_buf_len;
 uint8_t *_jpg_buf;
+
+static int file_index = 0;
+
+static esp_err_t save_picture_to_file(const uint8_t *buf, size_t len)
+{
+    char path[64];
+    snprintf(path, sizeof(path), "/sdcard/%d.jpg", file_index++);
+    FILE *f = fopen(path, "wb");
+    if (!f) {
+        ESP_LOGE("SD", "Failed to open file for writing: %s", path);
+        return ESP_FAIL;
+    }
+    fwrite(buf, 1, len, f);
+    fclose(f);
+    ESP_LOGI("SD", "Saved file: %s (%d bytes)", path, len);
+    return ESP_OK;
+}
+
+static esp_err_t init_sdcard(void)
+{
+    esp_err_t ret;
+
+    sdmmc_host_t host = SDMMC_HOST_DEFAULT();
+    host.flags = SDMMC_HOST_FLAG_1BIT | SDMMC_HOST_FLAG_4BIT; // use 4-bit bus
+    host.max_freq_khz = SDMMC_FREQ_HIGHSPEED;
+
+    sdmmc_slot_config_t slot_config = SDMMC_SLOT_CONFIG_DEFAULT();
+    slot_config.clk = GPIO_NUM_15;
+    slot_config.cmd = GPIO_NUM_7;
+    slot_config.d0  = GPIO_NUM_16;
+    slot_config.d1  = GPIO_NUM_17;
+    slot_config.d2  = GPIO_NUM_5;
+    slot_config.d3  = GPIO_NUM_6;
+    slot_config.width = 4;
+
+    esp_vfs_fat_sdmmc_mount_config_t mount_config = {
+        .format_if_mount_failed = false,
+        .max_files = 5,
+        .allocation_unit_size = 16 * 1024
+    };
+
+    sdmmc_card_t* card;
+    ret = esp_vfs_fat_sdmmc_mount("/sdcard", &host, &slot_config, &mount_config, &card);
+    if (ret != ESP_OK) {
+        ESP_LOGE("SD", "Failed to mount SD card: %s", esp_err_to_name(ret));
+        return ret;
+    }
+
+    sdmmc_card_print_info(stdout, card);
+    return ESP_OK;
+}
+
 
 static esp_err_t init_camera(void)
 {
@@ -60,7 +118,7 @@ static esp_err_t init_camera(void)
                                      .pixel_format = PIXFORMAT_JPEG,
                                      .frame_size = FRAMESIZE_HD,
 
-                                     .jpeg_quality = 10,
+                                     .jpeg_quality = 12,
                                      .fb_count = 2,
                                      .grab_mode = CAMERA_GRAB_LATEST}; // CAMERA_GRAB_LATEST. Sets when buffers should be filled
     esp_err_t err = esp_camera_init(&camera_config);
@@ -99,6 +157,8 @@ void cam_take_picture()
     // Camera format is in JPEG already
     _jpg_buf_len = fb->len;
     _jpg_buf = fb->buf;
+
+    //save_picture_to_file(fb->buf, fb->len);
 
     esp_camera_fb_return(fb);
 

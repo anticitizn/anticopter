@@ -1,0 +1,10 @@
+
+#ifndef ANTICOPTER_CONFIG
+#define ANTICOPTER_CONFIG
+
+typedef enum
+{
+    INITIALIZING, NOT_CONNECTED, CONNECTED
+} DRONE_STATE;
+
+#endif

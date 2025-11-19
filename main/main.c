@@ -14,13 +14,20 @@ static const char *TAG = "ANTICOPTER";
 #include "pwm_control.h"
 #include "udp.h"
 
+void control_sensor_loop()
+{
+    while (true)
+    {
+        cam_take_picture();
+        motors_tick();
+    }
+}
+
 void app_main()
 {
     // lsm6dsr_read_data_polling();
 
     init_leds();
-
-    printf("Starting leds!");
 
     set_led(0, 50, 0, 0);
     set_led(1, 50, 0, 0);
@@ -28,8 +35,6 @@ void app_main()
     set_led(3, 50, 0, 0);
 
     vTaskDelay(1000 / portTICK_PERIOD_MS);
-
-    printf("Stopping leds!");
 
     set_led(0, 0, 0, 0);
     set_led(1, 0, 0, 0);
@@ -52,13 +57,14 @@ void app_main()
     wifi_init_softap();
 
     err = init_camera();
+    err = init_sdcard();
     if (err != ESP_OK)
     {
         printf("err: %s\n", esp_err_to_name(err));
         return;
     }
 
-    xTaskCreatePinnedToCore(lsm6dsr_read_data_polling, "imu_polling", 4096, NULL, 5, NULL, 0);
+    xTaskCreatePinnedToCore(control_sensor_loop, "control_sensor_loop", 4096, NULL, 5, NULL, 0);
     xTaskCreatePinnedToCore(udp_server_task, "udp_server", 4096, (void*)AF_INET, 5, NULL, 1);
     ESP_LOGI(TAG, "Anticopter software is up and running\n");
     

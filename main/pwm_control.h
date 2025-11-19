@@ -18,6 +18,19 @@
 #define PWM_FREQ_HZ 40000
 #define PWM_RESOLUTION LEDC_TIMER_10_BIT
 
+// The higher the beta value, the faster the actual PWM value reaches the desired PWM
+#define LPF_BETA_LOW 0.2   // This is used for current PWM values under 30
+# define LPF_BETA_HIGH 0.5 // This is used for current PWM values equal to or over 30
+
+float current_motor_pwm[4] = {0};
+float desired_motor_pwm[4] = {0};
+
+// Simple digital low-pass filter to prevent hard PWM jumps that cause hte inrush current to spike and the board to reset
+float lpf_smooth(float current_value, float new_value, float beta)
+{
+    return current_value - (beta * (current_value - new_value));
+}
+
 void setup_pwm()
 {
     ledc_timer_config_t timer_conf = {
@@ -38,54 +51,71 @@ void setup_pwm()
     }
 }
 
+// Set the PWM value of one motor
+// duty_cycle is in percentages, between 0 and 100
+static void motor_pwm(int motor_i, int duty_cycle)
+{
+    // Set the duty cycle
+    ledc_set_duty(LEDC_LOW_SPEED_MODE, PWM_CHANNEL_BASE + motor_i, duty_cycle * ((1 << LEDC_TIMER_13_BIT) - 1) / 100);
+    ledc_update_duty(LEDC_LOW_SPEED_MODE, PWM_CHANNEL_BASE + motor_i);
+}
+
+// Set the PWM value of all motors
+// duty_cycle is in percentages, between 0 and 100
+static void motors_pwm(int duty_cycle)
+{
+    for (int i = 0; i < 4; i++)
+    {
+        motor_pwm(i, duty_cycle);
+    }
+}
+
+// This needs to be called in the main control loop
+void motors_tick()
+{
+    for (int i = 0; i < 4; i++)
+    {
+        // On increasing PWM values, we run the PWM output through a digital low-pass filter to reduce the current inrush spike
+        // When the PWM is decreasing instead, there's no need to do it, so we don't do it
+        // (also it is useful to be able to stop all motors immediately)
+        if (desired_motor_pwm[i] > current_motor_pwm[i])
+        {
+            float beta = current_motor_pwm[i] >= 30 ? LPF_BETA_HIGH : LPF_BETA_LOW;
+            int smoothed_duty_cycle = (int)floor(lpf_smooth(current_motor_pwm[i], desired_motor_pwm[i], beta));
+            motor_pwm(i, smoothed_duty_cycle);
+            current_motor_pwm[i] = smoothed_duty_cycle;
+        }
+        else
+        {
+            motor_pwm(i, desired_motor_pwm[i]);
+            current_motor_pwm[i] = desired_motor_pwm[i];
+        }
+        
+        printf("Pwm | Current: %f | Desired: %f\n", current_motor_pwm[i], desired_motor_pwm[i]);
+    }
+}
+
+void set_motor_pwm(int motor_i, int duty_cycle)
+{
+    desired_motor_pwm[motor_i] = duty_cycle;
+}
+
+// Spin each motor very briefly at low power in sequence
 void motors_check()
 {
     for (int i = 0; i < 4; i++)
     {
-        // Set duty cycle to 5%
-        ledc_set_duty(LEDC_LOW_SPEED_MODE, PWM_CHANNEL_BASE + i, 2 * ((1 << LEDC_TIMER_13_BIT) - 1) / 100);
-        ledc_update_duty(LEDC_LOW_SPEED_MODE, PWM_CHANNEL_BASE + i);
+        // Set motor to 5% duty cycle
+        motor_pwm(i, 2);
 
-        vTaskDelay(75 / portTICK_PERIOD_MS); // Delay for 75 ms
+        // Wait 75 ms
+        vTaskDelay(75 / portTICK_PERIOD_MS); 
 
-        // Turn off PWM
-        ledc_stop(LEDC_LOW_SPEED_MODE, PWM_CHANNEL_BASE + i, 0);
-        vTaskDelay(600 / portTICK_PERIOD_MS);
+        // Turn off the motor
+        motor_pwm(i, 0);
+
+        vTaskDelay(500 / portTICK_PERIOD_MS);
     }
-
-    vTaskDelay(2000 / portTICK_PERIOD_MS);
-}
-
-void motors_off()
-{
-    for (int i = 0; i < 4; i++)
-    {
-        // Turn off PWM
-        ledc_stop(LEDC_LOW_SPEED_MODE, PWM_CHANNEL_BASE + i, 0);
-    }
-}
-
-// duty_cycle is in percentages, between 0 and 100
-void motors_pwm(int duty_cycle)
-{
-    for (int i = 0; i < 4; i++)
-    {
-        // Set duty cycle
-        ledc_set_duty(LEDC_LOW_SPEED_MODE, PWM_CHANNEL_BASE + i, duty_cycle * ((1 << LEDC_TIMER_13_BIT) - 1) / 100);
-        ledc_update_duty(LEDC_LOW_SPEED_MODE, PWM_CHANNEL_BASE + i);
-
-        //vTaskDelay(10 / portTICK_PERIOD_MS);
-    }
-}
-
-// duty_cycle is in percentages, between 0 and 100
-void motor_pwm(int motor, int duty_cycle)
-{
-    // Set duty cycle
-    ledc_set_duty(LEDC_LOW_SPEED_MODE, PWM_CHANNEL_BASE + motor, duty_cycle * ((1 << LEDC_TIMER_13_BIT) - 1) / 100);
-    ledc_update_duty(LEDC_LOW_SPEED_MODE, PWM_CHANNEL_BASE + motor);
-
-    //vTaskDelay(10 / portTICK_PERIOD_MS);
 }
 
 void pwm_motors_main()

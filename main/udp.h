@@ -91,7 +91,7 @@ static void udp_server_task(void *pvParameters)
 
         while (1)
         {
-            ESP_LOGI(TAG, "Waiting for data");
+            // ESP_LOGI(TAG, "Waiting for data");
             int len = recvfrom(sock, rx_buffer, sizeof(rx_buffer) - 1, 0, (struct sockaddr *)&source_addr, &socklen);
             connected = true;
 
@@ -109,9 +109,9 @@ static void udp_server_task(void *pvParameters)
                 inet_ntoa_r(((struct sockaddr_in *)&source_addr)->sin_addr, addr_str, sizeof(addr_str) - 1);
 
                 header[127] = 0; // The header should already be null-terminated but just in case
-                ESP_LOGI(TAG, "Received %d bytes from %s:", len, addr_str);
-                ESP_LOGI(TAG, "Header: %s", header);
-                ESP_LOGI(TAG, "Payload: %s", payload);
+                // ESP_LOGI(TAG, "Received %d bytes from %s:", len, addr_str);
+                // ESP_LOGI(TAG, "Header: %s", header);
+                // ESP_LOGI(TAG, "Payload: %s", payload);
                 
                 if (strcmp("get_telemetry", header) == 0)
                 {
@@ -132,8 +132,8 @@ static void udp_server_task(void *pvParameters)
                     double elapsed_time_ms = (double)(end_time - start_time) / 1000;
 
                     // Print the elapsed time
-                    printf("Time taken for execution: %lf ms\n", elapsed_time_ms);
-                    printf("Size: %d b\n", _jpg_buf_len);
+                    // printf("Time taken for execution: %lf ms\n", elapsed_time_ms);
+                    // printf("Size: %d b\n", _jpg_buf_len);
                 }
                 else if (strcmp("get_imu", header) == 0)
                 {
@@ -181,10 +181,10 @@ static void udp_server_task(void *pvParameters)
 
                     if (sscanf(payload, "%d %d %d %d", &mot0, &mot1, &mot2, &mot3) == 4)
                     {
-                        motor_pwm(0, mot0);
-                        motor_pwm(1, mot1);
-                        motor_pwm(2, mot2);
-                        motor_pwm(3, mot3);
+                        set_motor_pwm(0, mot0);
+                        set_motor_pwm(1, mot1);
+                        set_motor_pwm(2, mot2);
+                        set_motor_pwm(3, mot3);
                         ESP_LOGI(TAG, "MOTORS: %d, %d, %d, %d", mot0, mot1, mot2, mot3);
                     } 
                     else 

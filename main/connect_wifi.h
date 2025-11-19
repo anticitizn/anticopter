@@ -18,9 +18,6 @@
 #include <lwip/sys.h>
 #include <nvs_flash.h>
 
-int wifi_connect_status = 0;
-int s_retry_num = 0;
-
 // The drone's IP should be 192.168.4.1
 #define WIFI_SSID "ANTICOPTER"
 #define WIFI_PASSWORD ""
@@ -37,6 +34,10 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
     {
         wifi_event_ap_stadisconnected_t* event = (wifi_event_ap_stadisconnected_t*) event_data;
     }
+    else if (event_id == WIFI_EVENT_AP_STACONNECTED)
+    {
+        // A client has connected to the soft AP
+    }
 }
 
 void wifi_init_softap(void)
@@ -48,11 +49,7 @@ void wifi_init_softap(void)
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
 
-    ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
-                                                        ESP_EVENT_ANY_ID,
-                                                        &wifi_event_handler,
-                                                        NULL,
-                                                        NULL));
+    ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,  ESP_EVENT_ANY_ID, &wifi_event_handler, NULL, NULL));
 
     wifi_config_t wifi_config = {
         .ap = {
@@ -61,23 +58,14 @@ void wifi_init_softap(void)
             .channel = WIFI_CHANNEL,
             .password = WIFI_PASSWORD,
             .max_connection = WIFI_MAX_STA_CONN,
-#ifdef CONFIG_ESP_WIFI_SOFTAP_SAE_SUPPORT
             .authmode = WIFI_AUTH_WPA3_PSK,
             .sae_pwe_h2e = WPA3_SAE_PWE_BOTH,
-#else /* CONFIG_ESP_WIFI_SOFTAP_SAE_SUPPORT */
-            .authmode = WIFI_AUTH_WPA2_PSK,
-#endif
             .pmf_cfg = {
                     .required = true,
             },
-#ifdef CONFIG_ESP_WIFI_BSS_MAX_IDLE_SUPPORT
-            .bss_max_idle_cfg = {
-                .period = WIFI_AP_DEFAULT_MAX_IDLE_PERIOD,
-                .protected_keep_alive = 1,
-            },
-#endif
         },
     };
+
     if (strlen(WIFI_PASSWORD) == 0) 
     {
         wifi_config.ap.authmode = WIFI_AUTH_OPEN;
