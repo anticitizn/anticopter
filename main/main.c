@@ -4,8 +4,6 @@
 #include <esp_system.h>
 #include <nvs_flash.h>
 
-static const char *TAG = "ANTICOPTER";
-
 #include "camera.h"
 #include "connect_wifi.h"
 #include "http.h"
@@ -13,8 +11,8 @@ static const char *TAG = "ANTICOPTER";
 #include "led.h"
 #include "pwm_control.h"
 #include "udp.h"
-// #include "lsm6ds33/lsm6ds33.h"
 
+static const char *TAG = "ANTICOPTER";
 
 void control_sensor_loop()
 {
@@ -22,7 +20,7 @@ void control_sensor_loop()
     {
         cam_take_picture();
         motors_tick();
-        poll_lsm6ds3();
+        imu_poll();
     }
 }
 
@@ -67,7 +65,7 @@ void app_main()
         return;
     }
 
-    init_lsm6ds3();
+    imu_init();
 
     xTaskCreatePinnedToCore(control_sensor_loop, "control_sensor_loop", 4096, NULL, 5, NULL, 0);
     xTaskCreatePinnedToCore(udp_server_task, "udp_server", 4096, (void*)AF_INET, 5, NULL, 1);

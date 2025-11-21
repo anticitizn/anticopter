@@ -15,7 +15,7 @@
 
 #define PWM_CHANNEL_BASE LEDC_CHANNEL_1
 #define PWM_TIMER_BASE LEDC_TIMER_1
-#define PWM_FREQ_HZ 40000
+#define PWM_FREQ_HZ 16000
 #define PWM_RESOLUTION LEDC_TIMER_10_BIT
 
 // The higher the beta value, the faster the actual PWM value reaches the desired PWM
@@ -106,7 +106,7 @@ void motors_check()
     for (int i = 0; i < 4; i++)
     {
         // Set motor to 5% duty cycle
-        motor_pwm(i, 2);
+        motor_pwm(i, 1);
 
         // Wait 75 ms
         vTaskDelay(75 / portTICK_PERIOD_MS); 

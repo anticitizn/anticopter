@@ -35,7 +35,6 @@ char *header = rx_buffer;
 char *payload = rx_buffer + 128;
 
 char data_buffer[256] = {0};
-bool connected = 0;
 int sock;
 struct sockaddr_storage source_addr;
 
@@ -93,14 +92,11 @@ static void udp_server_task(void *pvParameters)
         {
             // ESP_LOGI(TAG, "Waiting for data");
             int len = recvfrom(sock, rx_buffer, sizeof(rx_buffer) - 1, 0, (struct sockaddr *)&source_addr, &socklen);
-            connected = true;
 
             // Error occurred during receiving
-            if (len < 0)
+            if (len < 0 && errno == EWOULDBLOCK)
             {
-                ESP_LOGE(TAG, "recvfrom failed: errno %d", errno);
-                connected = false;
-                break;
+                continue;
             }
             // Data received
             else
@@ -202,7 +198,6 @@ static void udp_server_task(void *pvParameters)
         if (sock != -1)
         {
             ESP_LOGE(TAG, "Shutting down socket and restarting...");
-            connected = false;
             shutdown(sock, 0);
             close(sock);
         }
