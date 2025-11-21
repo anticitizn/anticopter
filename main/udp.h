@@ -117,17 +117,14 @@ static void udp_server_task(void *pvParameters)
                 }
                 else if (strcmp("get_camera", header) == 0)
                 {
-                    int64_t start_time = esp_timer_get_time(); // Get the start time in microseconds
+                    int64_t start_time = esp_timer_get_time();
 
-                    // The code block you want to measure
                     sendto(sock, _jpg_buf, _jpg_buf_len, 0, (struct sockaddr *)&source_addr, sizeof(source_addr));
 
-                    int64_t end_time = esp_timer_get_time(); // Get the end time in microseconds
+                    int64_t end_time = esp_timer_get_time();
 
-                    // Calculate the elapsed time in milliseconds
                     double elapsed_time_ms = (double)(end_time - start_time) / 1000;
 
-                    // Print the elapsed time
                     // printf("Time taken for execution: %lf ms\n", elapsed_time_ms);
                     // printf("Size: %d b\n", _jpg_buf_len);
                 }

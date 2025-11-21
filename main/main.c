@@ -26,8 +26,6 @@ void control_sensor_loop()
 
 void app_main()
 {
-    //lsm6ds3_read_data_polling();
-
     init_leds();
 
     set_led(0, 50, 0, 0);
