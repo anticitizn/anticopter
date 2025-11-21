@@ -1,58 +1,40 @@
-
 #ifndef ANTICOPTER_IMU
 #define ANTICOPTER_IMU
 
-/* i2c - Simple example
-
-   Simple I2C example that shows how to initialize I2C
-   as well as reading and writing from and to registers for a sensor connected over I2C.
-
-   The sensor used in this example is a MPU9250 inertial measurement unit.
-
-   For other examples please check:
-   https://github.com/espressif/esp-idf/tree/master/examples
-
-   See README.md file to get detailed usage of this example.
-
-   This example code is in the Public Domain (or CC0 licensed, at your option.)
-
-   Unless required by applicable law or agreed to in writing, this
-   software is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
-   CONDITIONS OF ANY KIND, either express or implied.
-*/
 #include "driver/i2c.h"
 #include "esp_log.h"
-#include "lsm6dsr/lsm6dsr_reg.h"
+#include "lsm6ds3/lsm6ds3_reg.h"
 #include "camera.h"
 #include <stdio.h>
+#include <math.h>
 
-#define I2C_MASTER_SCL_IO 1 /*!< GPIO number used for I2C master clock */
-#define I2C_MASTER_SDA_IO 2 /*!< GPIO number used for I2C master data  */
-#define I2C_MASTER_NUM I2C_NUM_0 /*!< I2C master i2c port number, the number of i2c peripheral interfaces available will depend on the chip */
-#define I2C_MASTER_FREQ_HZ 100000   /*!< I2C master clock frequency */
-#define I2C_MASTER_TX_BUF_DISABLE 0 /*!< I2C master doesn't need buffer */
-#define I2C_MASTER_RX_BUF_DISABLE 0 /*!< I2C master doesn't need buffer */
+#define I2C_MASTER_SCL_IO 1
+#define I2C_MASTER_SDA_IO 2
+#define I2C_MASTER_NUM I2C_NUM_0
+#define I2C_MASTER_FREQ_HZ 100000
+#define I2C_MASTER_TX_BUF_DISABLE 0
+#define I2C_MASTER_RX_BUF_DISABLE 0
 #define I2C_MASTER_TIMEOUT_MS 1000
 
-#define LSM6DSR_SENSOR_ADDR 0x6B
+#define LSM6DS3_SENSOR_ADDR 0x6A
 
-//
-// Mahony filter constants and variables
-//
 #define RAD_TO_DEG (180.0f / M_PI)
-// Proportional gain for Mahony filter
-#define Kp 2.0f 
-// Integral gain for Mahony filter
-#define Ki 0.005f 
+#define Kp_BASE  2.0f
+#define Kp_BOOST 10.0f
+#define Ki       0.005f
 
-// Quaternion for orientation representation
+static float Kp_current = Kp_BASE;
+static float ahrs_time  = 0.0f;
+
 static float q[4] = {1.0f, 0.0f, 0.0f, 0.0f};
-
-// Integral feedback
 static float integralFB[3] = {0.0f, 0.0f, 0.0f};
 
-static int16_t data_raw_acceleration[3];
-static int16_t data_raw_angular_rate[3];
+static int16_t data_raw_acceleration[3] = {0.0f, 0.0f, 0.0f};
+static int16_t data_raw_angular_rate[3] = {0.0f, 0.0f, 0.0f};
+
+static float gyro_bias[3] = {0.0f, 0.0f, 0.0f};
+static float orientation_offset[3] = {0.0f, 0.0f, 0.0f};
+
 static int16_t data_raw_temperature;
 static float acceleration_mg[3];
 static float angular_rate_mdps[3];
@@ -61,16 +43,12 @@ static float orientation[3];
 
 static int64_t last_time = 0;
 static uint8_t whoamI, rst;
-static uint8_t tx_buffer[1000];
-i2c_port_t i2cPort = I2C_MASTER_NUM;
 
-/*
- * @brief  platform specific initialization (platform dependent)
- */
+static uint8_t tx_buffer[1000];
+static i2c_port_t i2cPort = I2C_MASTER_NUM;
+
 static void platform_init(void)
 {
-    int i2c_master_port = I2C_MASTER_NUM;
-
     i2c_config_t conf = {
         .mode = I2C_MODE_MASTER,
         .sda_io_num = I2C_MASTER_SDA_IO,
@@ -80,16 +58,21 @@ static void platform_init(void)
         .master.clk_speed = I2C_MASTER_FREQ_HZ,
     };
 
-    i2c_param_config(i2c_master_port, &conf);
-
-    i2c_driver_install(i2c_master_port, conf.mode, I2C_MASTER_RX_BUF_DISABLE, I2C_MASTER_TX_BUF_DISABLE, 0);
+    i2c_param_config(I2C_MASTER_NUM, &conf);
+    i2c_driver_install(
+        I2C_MASTER_NUM,
+        conf.mode,
+        I2C_MASTER_RX_BUF_DISABLE,
+        I2C_MASTER_TX_BUF_DISABLE,
+        0
+    );
 }
 
 static int32_t platform_write(void *handle, uint8_t reg, const uint8_t *bufp, uint16_t len)
 {
     i2c_cmd_handle_t cmd = i2c_cmd_link_create();
     i2c_master_start(cmd);
-    i2c_master_write_byte(cmd, (LSM6DSR_SENSOR_ADDR << 1) | I2C_MASTER_WRITE, true);
+    i2c_master_write_byte(cmd, (LSM6DS3_SENSOR_ADDR << 1) | I2C_MASTER_WRITE, true);
     i2c_master_write_byte(cmd, reg, true);
     i2c_master_write(cmd, (uint8_t *)bufp, len, true);
     i2c_master_stop(cmd);
@@ -102,10 +85,10 @@ static int32_t platform_read(void *handle, uint8_t reg, uint8_t *bufp, uint16_t 
 {
     i2c_cmd_handle_t cmd = i2c_cmd_link_create();
     i2c_master_start(cmd);
-    i2c_master_write_byte(cmd, (LSM6DSR_SENSOR_ADDR << 1) | I2C_MASTER_WRITE, true);
+    i2c_master_write_byte(cmd, (LSM6DS3_SENSOR_ADDR << 1) | I2C_MASTER_WRITE, true);
     i2c_master_write_byte(cmd, reg, true);
     i2c_master_start(cmd);
-    i2c_master_write_byte(cmd, (LSM6DSR_SENSOR_ADDR << 1) | I2C_MASTER_READ, true);
+    i2c_master_write_byte(cmd, (LSM6DS3_SENSOR_ADDR << 1) | I2C_MASTER_READ, true);
     i2c_master_read(cmd, bufp, len, I2C_MASTER_LAST_NACK);
     i2c_master_stop(cmd);
     i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, 1000 / portTICK_PERIOD_MS);
@@ -113,60 +96,41 @@ static int32_t platform_read(void *handle, uint8_t reg, uint8_t *bufp, uint16_t 
     return 0;
 }
 
-/*
- * @brief  Send buffer to console (platform dependent)
- *
- * @param  tx_buffer     buffer to transmit
- * @param  len           number of byte to send
- *
- */
-static void tx_com(uint8_t *tx_buffer, uint16_t len) 
+static void platform_delay(uint32_t ms)
 {
-    return; 
+    vTaskDelay(ms / portTICK_PERIOD_MS);
 }
 
-/*
- * @brief  platform specific delay (platform dependent)
- *
- * @param  ms        delay in ms
- *
- */
-static void platform_delay(uint32_t ms) 
+static void tx_com(uint8_t *buf, uint16_t len)
 {
-    vTaskDelay(ms / portTICK_PERIOD_MS); 
+    return; // Keep disabled as in your original code
 }
 
-// Mahony filter
+
+/*--------------------------------------------------------------------
+   Mahony Filter
+ --------------------------------------------------------------------*/
 void MahonyAHRSupdate(float gx, float gy, float gz, float ax, float ay, float az, float dt)
 {
     float norm;
     float vx, vy, vz;
     float ex, ey, ez;
 
-    // Normalize accelerometer measurement
     norm = sqrtf(ax * ax + ay * ay + az * az);
-    if (norm > 0.0f)
-    {
-        ax /= norm;
-        ay /= norm;
-        az /= norm;
-    }
-    else
-    {
-        return; // Skip update if accelerometer data invalid
-    }
+    if (norm <= 0.0f) return;
 
-    // Estimated direction of gravity
+    ax /= norm;
+    ay /= norm;
+    az /= norm;
+
     vx = 2.0f * (q[1] * q[3] - q[0] * q[2]);
     vy = 2.0f * (q[0] * q[1] + q[2] * q[3]);
     vz = q[0] * q[0] - q[1] * q[1] - q[2] * q[2] + q[3] * q[3];
 
-    // Error is cross-product between estimated and measured gravity
     ex = (ay * vz - az * vy);
     ey = (az * vx - ax * vz);
     ez = (ax * vy - ay * vx);
 
-    // Apply integral feedback if Ki > 0
     if (Ki > 0.0f)
     {
         integralFB[0] += Ki * ex * dt;
@@ -178,15 +142,15 @@ void MahonyAHRSupdate(float gx, float gy, float gz, float ax, float ay, float az
         gz += integralFB[2];
     }
 
-    // Apply proportional feedback
-    gx += Kp * ex;
-    gy += Kp * ey;
-    gz += Kp * ez;
+    gx += Kp_current * ex;
+    gy += Kp_current * ey;
+    gz += Kp_current * ez;
 
-    // Integrate rate of change of quaternion
+
     gx *= 0.5f * dt;
     gy *= 0.5f * dt;
     gz *= 0.5f * dt;
+
     float qDot1 = -q[1] * gx - q[2] * gy - q[3] * gz;
     float qDot2 = q[0] * gx + q[2] * gz - q[3] * gy;
     float qDot3 = q[0] * gy - q[1] * gz + q[3] * gx;
@@ -197,7 +161,6 @@ void MahonyAHRSupdate(float gx, float gy, float gz, float ax, float ay, float az
     q[2] += qDot3;
     q[3] += qDot4;
 
-    // Normalize quaternion
     norm = sqrtf(q[0] * q[0] + q[1] * q[1] + q[2] * q[2] + q[3] * q[3]);
     q[0] /= norm;
     q[1] /= norm;
@@ -207,137 +170,163 @@ void MahonyAHRSupdate(float gx, float gy, float gz, float ax, float ay, float az
 
 void estimate_position_orientation(float accel[3], float gyro[3], double dt)
 {
-    // Convert gyro values from degrees per second to radians per second
+    // Early-time Kp boost with linear ramp-down
+    ahrs_time += (float)dt;
+
+    if (ahrs_time < 0.5f) 
+    {
+        // Strong correction during first 0.5 s
+        Kp_current = Kp_BOOST;
+    } else if (ahrs_time < 1.0f) 
+    {
+        // Linearly ramp from Kp_BOOST down to Kp_BASE between 0.5–1.0 s
+        float t = (ahrs_time - 0.5f) / 0.5f;  // 0 .. 1
+        Kp_current = Kp_BOOST + t * (Kp_BASE - Kp_BOOST);
+    } else 
+    {
+        // Normal operation
+        Kp_current = Kp_BASE;
+    }
+
     float gyro_rad[3];
     gyro_rad[0] = gyro[0] * M_PI / 180.0f;
     gyro_rad[1] = gyro[1] * M_PI / 180.0f;
     gyro_rad[2] = gyro[2] * M_PI / 180.0f;
 
-    // Apply Mahony filter to estimate orientation
-    MahonyAHRSupdate(gyro_rad[0], gyro_rad[1], gyro_rad[2], accel[0], accel[1], accel[2], dt);
+    MahonyAHRSupdate(
+        gyro_rad[0], gyro_rad[1], gyro_rad[2],
+        accel[0], accel[1], accel[2],
+        dt
+    );
 
-    // Convert quaternion to Euler angles (roll, pitch, yaw)
-    float roll = atan2f(2.0f * (q[0] * q[1] + q[2] * q[3]), 1.0f - 2.0f * (q[1] * q[1] + q[2] * q[2]));
+    float roll = atan2f(2.0f * (q[0] * q[1] + q[2] * q[3]),
+                        1.0f - 2.0f * (q[1] * q[1] + q[2] * q[2]));
     float pitch = asinf(2.0f * (q[0] * q[2] - q[3] * q[1]));
-    float yaw = atan2f(2.0f * (q[0] * q[3] + q[1] * q[2]), 1.0f - 2.0f * (q[2] * q[2] + q[3] * q[3]));
+    float yaw = atan2f(2.0f * (q[0] * q[3] + q[1] * q[2]),
+                       1.0f - 2.0f * (q[2] * q[2] + q[3] * q[3]));
 
     orientation[0] = roll * RAD_TO_DEG;
     orientation[1] = pitch * RAD_TO_DEG;
     orientation[2] = yaw * RAD_TO_DEG;
-
-    //printf("Orientation (Roll, Pitch, Yaw): [%f, %f, %f], dt: %lf\n",
-    //       orientation[0], orientation[1], orientation[2], dt);
 }
 
-void lsm6dsr_read_data_polling(void)
+static void calibrate_gyro(stmdev_ctx_t *dev_ctx)
 {
-    stmdev_ctx_t dev_ctx;
-    /* Initialize mems driver interface */
-    dev_ctx.write_reg = platform_write;
-    dev_ctx.read_reg = platform_read;
-    dev_ctx.mdelay = platform_delay;
-    dev_ctx.handle = &i2cPort;
-    /* Init test platform */
-    platform_init();
-    /* Wait sensor boot time */
-    platform_delay(10);
-    /* Check device ID */
-    lsm6dsr_device_id_get(&dev_ctx, &whoamI);
+    const int samples = 500;
+    int32_t sum[3] = {0, 0, 0};
+    int16_t raw[3];
 
-    if (whoamI != LSM6DSR_ID)
-        while (1)
-            ;
+    // let sensor settle
+    platform_delay(200);  
 
-    /* Restore default configuration */
-    lsm6dsr_reset_set(&dev_ctx, PROPERTY_ENABLE);
-
-    do
+    for (int i = 0; i < samples; i++)
     {
-        lsm6dsr_reset_get(&dev_ctx, &rst);
+        uint8_t drdy;
+        lsm6ds3_gy_flag_data_ready_get(dev_ctx, &drdy);
+        if (!drdy) { i--; continue; }
+
+        lsm6ds3_angular_rate_raw_get(dev_ctx, raw);
+        sum[0] += raw[0];
+        sum[1] += raw[1];
+        sum[2] += raw[2];
+
+        platform_delay(2);
+    }
+
+    gyro_bias[0] = (float)sum[0] / samples;
+    gyro_bias[1] = (float)sum[1] / samples;
+    gyro_bias[2] = (float)sum[2] / samples;
+}
+
+stmdev_ctx_t dev_ctx = {
+        .write_reg = platform_write,
+        .read_reg = platform_read,
+        .mdelay = platform_delay,
+        .handle = &i2cPort
+    };
+
+void init_lsm6ds3(void)
+{
+    platform_init();
+    platform_delay(10);
+
+    lsm6ds3_device_id_get(&dev_ctx, &whoamI);
+    printf("whoami: %d\n", whoamI);
+    // if (whoamI != LSM6DS3_ID)
+    //     while(1);
+
+    lsm6ds3_reset_set(&dev_ctx, PROPERTY_ENABLE);
+    do {
+        lsm6ds3_reset_get(&dev_ctx, &rst);
     } while (rst);
 
-    /* Disable I3C interface */
-    lsm6dsr_i3c_disable_set(&dev_ctx, LSM6DSR_I3C_DISABLE);
+    lsm6ds3_block_data_update_set(&dev_ctx, PROPERTY_ENABLE);
 
-    /* Enable Block Data Update */
-    lsm6dsr_block_data_update_set(&dev_ctx, PROPERTY_ENABLE);
+    lsm6ds3_xl_full_scale_set(&dev_ctx, LSM6DS3_2g);
+    lsm6ds3_gy_full_scale_set(&dev_ctx, LSM6DS3_2000dps);
 
-    /* Set Output Data Rate */
-    lsm6dsr_xl_data_rate_set(&dev_ctx, LSM6DSR_XL_ODR_104Hz);
-    lsm6dsr_gy_data_rate_set(&dev_ctx, LSM6DSR_XL_ODR_104Hz);
+    lsm6ds3_xl_data_rate_set(&dev_ctx, LSM6DS3_XL_ODR_104Hz);
+    lsm6ds3_gy_data_rate_set(&dev_ctx, LSM6DS3_GY_ODR_104Hz);
 
-    /* Set full scale */
-    lsm6dsr_xl_full_scale_set(&dev_ctx, LSM6DSR_4g);
-    lsm6dsr_gy_full_scale_set(&dev_ctx, LSM6DSR_1000dps);
+    calibrate_gyro(&dev_ctx);
+}
 
-    /* Configure filtering chain(No aux interface)
-     * Accelerometer - LPF1 + LPF2 path
-     */
-    lsm6dsr_xl_hp_path_on_out_set(&dev_ctx, LSM6DSR_HP_PATH_DISABLE_ON_OUT);
-    lsm6dsr_xl_filter_lp2_set(&dev_ctx, PROPERTY_ENABLE);
+void poll_lsm6ds3(void)
+{
+    uint8_t reg;
 
-    lsm6dsr_gy_hp_path_internal_set(&dev_ctx, 0);
-    lsm6dsr_gy_filter_lp1_set(&dev_ctx, 1);
+    /* Accelerometer */
+    lsm6ds3_xl_flag_data_ready_get(&dev_ctx, &reg);
+    if (reg)
+    {
+        memset(data_raw_acceleration, 0, sizeof(data_raw_acceleration));
+        lsm6ds3_acceleration_raw_get(&dev_ctx, data_raw_acceleration);
 
-    /* Read samples in polling mode */
+        acceleration_mg[0] = 9.81f * lsm6ds3_from_fs2g_to_mg(data_raw_acceleration[0]) / 1000;
+        acceleration_mg[1] = 9.81f * lsm6ds3_from_fs2g_to_mg(data_raw_acceleration[1]) / 1000;
+        acceleration_mg[2] = 9.81f * lsm6ds3_from_fs2g_to_mg(data_raw_acceleration[2]) / 1000;
+    }
+
+    /* Gyroscope */
+    lsm6ds3_gy_flag_data_ready_get(&dev_ctx, &reg);
+    if (reg)
+    {
+        memset(data_raw_angular_rate, 0, sizeof(data_raw_angular_rate));
+        lsm6ds3_angular_rate_raw_get(&dev_ctx, data_raw_angular_rate);
+
+        data_raw_angular_rate[0] -= (int16_t)gyro_bias[0];
+        data_raw_angular_rate[1] -= (int16_t)gyro_bias[1];
+        data_raw_angular_rate[2] -= (int16_t)gyro_bias[2];
+
+        angular_rate_mdps[0] = lsm6ds3_from_fs2000dps_to_mdps(data_raw_angular_rate[0]) / 1000;
+        angular_rate_mdps[1] = lsm6ds3_from_fs2000dps_to_mdps(data_raw_angular_rate[1]) / 1000;
+        angular_rate_mdps[2] = lsm6ds3_from_fs2000dps_to_mdps(data_raw_angular_rate[2]) / 1000;
+
+        if (!last_time)
+            last_time = esp_timer_get_time();
+
+        int64_t time_now = esp_timer_get_time();
+        double dt = (double)(time_now - last_time) / 1e6;
+
+        estimate_position_orientation(acceleration_mg, angular_rate_mdps, dt);
+
+        // printf("ACC [m/s^2]: %.3f  %.3f  %.3f | GYRO [dps]: %.3f  %.3f  %.3f | ORI [deg]: roll=%.2f pitch=%.2f yaw=%.2f\n",
+        //     acceleration_mg[0], acceleration_mg[1], acceleration_mg[2],
+        //     angular_rate_mdps[0], angular_rate_mdps[1], angular_rate_mdps[2],
+        //     orientation[0], orientation[1], orientation[2]);
+
+        last_time = time_now;
+    }
+}
+
+// LSM6DS3 Polling Loop
+void lsm6ds3_read_data_polling(void)
+{
+    init_lsm6ds3();
+
     while (1)
     {
-        uint8_t reg;
-        /* Read output only if new xl value is available */
-        lsm6dsr_xl_flag_data_ready_get(&dev_ctx, &reg);
-
-        if (reg)
-        {
-            /* Read acceleration field data */
-            memset(data_raw_acceleration, 0x00, 3 * sizeof(int16_t));
-            lsm6dsr_acceleration_raw_get(&dev_ctx, data_raw_acceleration);
-            acceleration_mg[0] = 9.81f * lsm6dsr_from_fs4g_to_mg(data_raw_acceleration[0]) / 1000;// - accel_bias[0];
-            acceleration_mg[1] = 9.81f * lsm6dsr_from_fs4g_to_mg(data_raw_acceleration[1]) / 1000;// - accel_bias[1];
-            acceleration_mg[2] = 9.81f * lsm6dsr_from_fs4g_to_mg(data_raw_acceleration[2]) / 1000;// - accel_bias[2];
-            //printf("Acceleration [mg]:%4.2f\t%4.2f\t%4.2f\r\n", acceleration_mg[0], acceleration_mg[1], acceleration_mg[2]);
-            tx_com(tx_buffer, strlen((char const *)tx_buffer));
-        }
-
-        lsm6dsr_gy_flag_data_ready_get(&dev_ctx, &reg);
-
-        if (reg)
-        {
-            /* Read angular rate field data */
-            memset(data_raw_angular_rate, 0x00, 3 * sizeof(int16_t));
-            lsm6dsr_angular_rate_raw_get(&dev_ctx, data_raw_angular_rate);
-            angular_rate_mdps[0] = lsm6dsr_from_fs1000dps_to_mdps(data_raw_angular_rate[0]) / 1000; // - gyro_bias[0];
-            angular_rate_mdps[1] = lsm6dsr_from_fs1000dps_to_mdps(data_raw_angular_rate[1]) / 1000; // - gyro_bias[1];
-            angular_rate_mdps[2] = lsm6dsr_from_fs1000dps_to_mdps(data_raw_angular_rate[2]) / 1000; // - gyro_bias[2];
-            //printf("Angular rate [mdps]:%4.2f\t%4.2f\t%4.2f\r\n", angular_rate_mdps[0], angular_rate_mdps[1], angular_rate_mdps[2]);
-        }
-
-        if (reg)
-        {
-            
-            if (!last_time)
-            {
-                last_time = esp_timer_get_time();
-            }
-
-            int64_t current_time = esp_timer_get_time();
-            double dt = (double)(current_time - last_time) / 1000000;
-
-            estimate_position_orientation(acceleration_mg, angular_rate_mdps, dt);
-
-            last_time = current_time;
-        }
-
-        lsm6dsr_temp_flag_data_ready_get(&dev_ctx, &reg);        
-
-        if (reg)
-        {
-            /* Read temperature data */
-            memset(&data_raw_temperature, 0x00, sizeof(int16_t));
-            lsm6dsr_temperature_raw_get(&dev_ctx, &data_raw_temperature);
-            temperature_degC = lsm6dsr_from_lsb_to_celsius(data_raw_temperature);
-            //printf("Temperature [degC]:%6.2f\r\n", temperature_degC);
-            tx_com(tx_buffer, strlen((char const *)tx_buffer));
-        }
+        poll_lsm6ds3();
     }
 }
 

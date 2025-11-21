@@ -13,6 +13,8 @@ static const char *TAG = "ANTICOPTER";
 #include "led.h"
 #include "pwm_control.h"
 #include "udp.h"
+// #include "lsm6ds33/lsm6ds33.h"
+
 
 void control_sensor_loop()
 {
@@ -20,12 +22,13 @@ void control_sensor_loop()
     {
         cam_take_picture();
         motors_tick();
+        poll_lsm6ds3();
     }
 }
 
 void app_main()
 {
-    // lsm6dsr_read_data_polling();
+    //lsm6ds3_read_data_polling();
 
     init_leds();
 
@@ -63,6 +66,8 @@ void app_main()
         printf("err: %s\n", esp_err_to_name(err));
         return;
     }
+
+    init_lsm6ds3();
 
     xTaskCreatePinnedToCore(control_sensor_loop, "control_sensor_loop", 4096, NULL, 5, NULL, 0);
     xTaskCreatePinnedToCore(udp_server_task, "udp_server", 4096, (void*)AF_INET, 5, NULL, 1);

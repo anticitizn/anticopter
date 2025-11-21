@@ -35,7 +35,8 @@
     "event_groups.h": "c",
     "sys.h": "c",
     "esp_pm.h": "c",
-    "imu.h": "c"
+    "imu.h": "c",
+    "lsm6ds3_reg.h": "c"
   },
   "C_Cpp.errorSquiggles": "disabled",
   "idf.espIdfPath": "/home/danny/.esp/v5.3.1/esp-idf",

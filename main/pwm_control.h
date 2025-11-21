@@ -91,7 +91,7 @@ void motors_tick()
             current_motor_pwm[i] = desired_motor_pwm[i];
         }
         
-        printf("Pwm | Current: %f | Desired: %f\n", current_motor_pwm[i], desired_motor_pwm[i]);
+        // printf("Pwm | Current: %f | Desired: %f\n", current_motor_pwm[i], desired_motor_pwm[i]);
     }
 }
 

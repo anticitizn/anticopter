@@ -137,6 +137,7 @@ static void udp_server_task(void *pvParameters)
                 }
                 else if (strcmp("get_imu", header) == 0)
                 {
+                    format_data(data_buffer, acceleration_mg, angular_rate_mdps, temperature_degC, orientation);
                     sendto(sock, data_buffer, strlen(data_buffer), 0, (struct sockaddr *)&source_addr, sizeof(source_addr));
                 }                
                 else if (strcmp("set_led", header) == 0)
