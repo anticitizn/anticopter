@@ -1,3 +1,6 @@
+
+const char *TAG = "ANTICOPTER";
+
 #include "driver/gpio.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -9,10 +12,9 @@
 #include "http.h"
 #include "imu.h"
 #include "led.h"
-#include "pwm_control.h"
+#include "control/pwm_control.h"
+#include "control/pid_control.h"
 #include "udp.h"
-
-static const char *TAG = "ANTICOPTER";
 
 void control_sensor_loop()
 {
@@ -21,6 +23,7 @@ void control_sensor_loop()
         cam_take_picture();
         motors_tick();
         imu_poll();
+        pid_tick();
     }
 }
 
@@ -42,6 +45,8 @@ void app_main()
 
     setup_pwm();
     motors_check();
+
+    pid_init();
 
     esp_err_t err;
 

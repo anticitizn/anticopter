@@ -57,7 +57,7 @@ static float orientation_offset[3] = {0};
 static float orientation[3] = {0};
 
 bool imu_data_ready = false;
-static int64_t last_time = 0;
+static int64_t last_time_imu = 0;
 
 /* ---------------------------------------------------------
    Magnetometer Data
@@ -582,15 +582,15 @@ void imu_poll(void)
     poll_lsm6ds3();
     poll_lis3mdl();
 
-    if (!last_time)
+    if (!last_time_imu)
     {
-        last_time = esp_timer_get_time();
+        last_time_imu = esp_timer_get_time();
     }
 
     int64_t now = esp_timer_get_time();
-    double dt = (double)(now - last_time) / 1e6;
+    double dt = (double)(now - last_time_imu) / 1e6;
 
-    last_time = now;
+    last_time_imu = now;
 
     if (imu_data_ready && mag_data_ready)
     {
@@ -608,7 +608,7 @@ void imu_init(void)
     ahrs_time = 0.0f;
     q[0] = 1.0f; q[1] = q[2] = q[3] = 0.0f;
     integralFB[0] = integralFB[1] = integralFB[2] = 0.0f;
-    last_time = 0;
+    last_time_imu = 0;
 
     // Give the filter some time to converge in the current pose
     for (int i = 0; i < 100; ++i)

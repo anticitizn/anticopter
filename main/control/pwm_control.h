@@ -8,6 +8,8 @@
 #include "freertos/task.h"
 #include <stdio.h>
 
+#include "../led.h"
+
 #define MOTOR_GPIO_1 39
 #define MOTOR_GPIO_2 40
 #define MOTOR_GPIO_3 41
@@ -97,7 +99,10 @@ void motors_tick()
 
 void set_motor_pwm(int motor_i, int duty_cycle)
 {
-    desired_motor_pwm[motor_i] = duty_cycle;
+    // desired_motor_pwm[motor_i] = duty_cycle;
+
+    int led_val = (int)(duty_cycle / 10);
+    set_led(motor_i, led_val, led_val, led_val);
 }
 
 // Spin each motor very briefly at low power in sequence

@@ -15,7 +15,7 @@
 #include <lwip/netdb.h>
 
 #include "imu.h"
-#include "pwm_control.h"
+#include "control/pwm_control.h"
 //#include "camera.h"
 #include "led.h"
 
@@ -37,6 +37,10 @@ char *payload = rx_buffer + 128;
 char data_buffer[256] = {0};
 int sock;
 struct sockaddr_storage source_addr;
+
+extern float roll_target_deg;
+extern float pitch_target_deg;
+extern float yaw_target_deg;
 
 // Function to format the data into a string
 void format_data(char *buffer, float *acceleration, float *angular_rate, float temperature, float *orientation) {
@@ -184,6 +188,24 @@ static void udp_server_task(void *pvParameters)
                     else 
                     {
                         ESP_LOGI(TAG, "Failed to extract motor data from the payload!");
+                        ESP_LOGI(TAG, "PAYLOAD: %s", payload);
+                    }
+                }
+                else if (strcmp("set_control_target", header) == 0)
+                {
+                    float throttle, roll_angle, pitch_angle, yaw_angle;
+
+                    if (sscanf(payload, "%f %f %f %f", &throttle, &roll_angle, &pitch_angle, &yaw_angle) == 4)
+                    {
+                        throttle_cmd = throttle;
+                        roll_target_deg = roll_angle;
+                        pitch_target_deg = pitch_angle;
+                        yaw_target_deg = yaw_angle;
+                        ESP_LOGI(TAG, "CONTROL TARGET: %f | %f %f %f", throttle, roll_angle, pitch_angle, yaw_angle);
+                    } 
+                    else 
+                    {
+                        ESP_LOGI(TAG, "Failed to extract control target data from the payload!");
                         ESP_LOGI(TAG, "PAYLOAD: %s", payload);
                     }
                 }
