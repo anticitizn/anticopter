@@ -7,7 +7,7 @@ endif()
 
 idf_component_register(SRCS "led_strip/led_strip_encoder.c" 
                     "lsm6dsr/lsm6dsr_reg.c" "lsm6ds3/lsm6ds3_reg.c" "lis3mdl/lis3mdl_reg.c" 
-                    "control/fp_pid.c" 
+                    "control/pid.c" 
                     "main.c"
                     INCLUDE_DIRS "."
                     REQUIRES ${requires})

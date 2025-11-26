@@ -28,39 +28,30 @@
    Orientation / Filter Configuration
 --------------------------------------------------------- */
 #define RAD_TO_DEG (180.0f / M_PI)
-#define Kp_BASE  2.0f
-#define Kp_BOOST 5.0f
-#define Kp_BASE_MAG 0.35f
-#define Kp_BOOST_MAG 2.0f
-#define Ki       0.005f
 
 static float ahrs_time  = 0.0f;
 
 // Tunable gains
-static float Kp_acc = Kp_BASE;  // accel correction uses dynamic Kp
-static float Kp_mag = Kp_BASE_MAG;       // smaller constant mag correction gain
-static float Ki_acc = Ki;          // integral only from accel error
+static float Kp_acc = 2.0f;     // accel correction uses dynamic Kp
+static float Kp_mag = 0.35f; // smaller constant mag correction gain
+static float Ki_acc = 0.005f;          // integral only from accel error
 static float alpha_mag = 0.2f;     // magnetometer low-pass alpha (0 < alpha < 1, lower = more smoothing)
 
-// Persistent magnetometer smoothing
+// Magnetometer LPF
 static float mag_lp[3] = {0.0f, 0.0f, 0.0f};
 static bool  mag_lp_init = false;
 
-/* ---------------------------------------------------------
-   Quaternion + Integral Feedback
---------------------------------------------------------- */
+// Quaternion + integral feedback
 static float q[4]        = {1.0f, 0.0f, 0.0f, 0.0f};
 static float integralFB[3] = {0.0f, 0.0f, 0.0f};
 
-/* ---------------------------------------------------------
-   Raw IMU Data
---------------------------------------------------------- */
+// Raw IMU data storage
 static int16_t data_raw_acceleration[3] = {0};
 static int16_t data_raw_angular_rate[3] = {0};
 static int16_t data_raw_temperature     = 0;
 
 static float acceleration_mg[3] = {0};
-static float angular_rate_mdps[3] = {0};
+static float angular_rate_dps[3] = {0};
 static float temperature_degC = 0.0f;
 
 static float gyro_bias[3] = {0};
@@ -70,9 +61,16 @@ static float orientation[3] = {0};
 bool imu_data_ready = false;
 static int64_t last_time_imu = 0;
 
-/* ---------------------------------------------------------
-   Magnetometer Data
---------------------------------------------------------- */
+// This is the IMU to drone body rotation matrix
+// currently just identity because the values that I got out of it with least squares
+// were worse than the identity matrix...
+static const float R_mount_matrix[3][3] = {
+    {  1,  0,  0 },
+    {  0,  1,  0 },
+    {  0,  0,  1 }
+};
+
+// Magnetometer data
 static int16_t data_raw_magnetic[3] = {0};
 static float magnetic_mG[3] = {0};
 float mag_norm[3] = {0};
@@ -181,7 +179,7 @@ void MahonyAHRSupdate(float gx, float gy, float gz,
     } 
     else 
     {
-        // invalid accel; ignore its contribution
+        // invalid accel values; ignore its contribution
         ax = ay = az = 0.0f;
     }
 
@@ -244,7 +242,7 @@ void MahonyAHRSupdate(float gx, float gy, float gz,
     ez_acc = (ax * vy - ay * vx);
 
     // --- Magnetometer error (heading), horizontal only ---
-    if (useMag) 
+    if (useMag)
     {
         // Rotate mag into Earth frame (h = q * m_body * q_conj)
         hx = 2.0f * mx * (0.5f - q2 * q2 - q3 * q3)
@@ -353,7 +351,6 @@ void MahonyAHRSupdate(float gx, float gy, float gz,
 }
 
 
-
 static void quat_to_euler_deg(const float q[4], float euler_deg[3])
 {
     float q0 = q[0];
@@ -372,30 +369,28 @@ static void quat_to_euler_deg(const float q[4], float euler_deg[3])
     euler_deg[2] = yaw   * RAD_TO_DEG;
 }
 
+static inline float wrap_angle_180(float x)
+{
+    while (x > 180.0f) x -= 360.0f;
+    while (x < -180.0f) x += 360.0f;
+    return x;
+}
+
+static inline void apply_mount_matrix(float v[3], const float R[3][3])
+{
+    float x = v[0];
+    float y = v[1];
+    float z = v[2];
+
+    v[0] = R[0][0]*x + R[0][1]*y + R[0][2]*z;
+    v[1] = R[1][0]*x + R[1][1]*y + R[1][2]*z;
+    v[2] = R[2][0]*x + R[2][1]*y + R[2][2]*z;
+}
+
 void estimate_position_orientation(float accel[3], float gyro[3], float mag[3], double dt)
 {
     // Early-time Kp boost with linear ramp-down
     ahrs_time += (float)dt;
-
-    // if (ahrs_time < 3.0f) 
-    // {
-    //     Kp_acc = Kp_BOOST;
-    //     Kp_mag = Kp_BOOST_MAG;
-    // } 
-    // else if (ahrs_time < 5.0f) 
-    // {
-    //     float t = (ahrs_time - 0.5f) / 0.5f;  // 0 .. 1
-    //     Kp_acc = Kp_BOOST + t * (Kp_BASE - Kp_BOOST);
-    //     Kp_mag = Kp_BOOST_MAG + t * (Kp_BASE_MAG - Kp_BOOST_MAG);
-    // } 
-    // else 
-    // {
-    //     Kp_acc = Kp_BASE;
-    //     Kp_mag = Kp_BASE_MAG;
-    // }
-
-    Kp_acc = Kp_BASE;
-    Kp_mag = Kp_BASE_MAG;
 
     float gyro_rad[3];
     gyro_rad[0] = gyro[0] * (float)M_PI / 180.0f;
@@ -420,9 +415,9 @@ void estimate_position_orientation(float accel[3], float gyro[3], float mag[3], 
     float euler_deg[3];
     quat_to_euler_deg(q, euler_deg);
 
-    orientation[0] = euler_deg[0] - orientation_offset[0];
-    orientation[1] = euler_deg[1] - orientation_offset[1];
-    orientation[2] = euler_deg[2] - orientation_offset[2];
+    orientation[0] = wrap_angle_180(euler_deg[0] - orientation_offset[0]);
+    orientation[1] = wrap_angle_180(euler_deg[1] - orientation_offset[1]);
+    orientation[2] = wrap_angle_180(euler_deg[2] - orientation_offset[2]);
 }
 
 
@@ -513,9 +508,14 @@ void poll_lsm6ds3(void)
     {
         lsm6ds3_acceleration_raw_get(&dev_ctx_imu, data_raw_acceleration);
 
+        // printf("%d %d %d\n", data_raw_acceleration[0], data_raw_acceleration[1], data_raw_acceleration[2]);
+
         acceleration_mg[0] = 9.81f * lsm6ds3_from_fs2g_to_mg(data_raw_acceleration[0]) / 1000.0f;
         acceleration_mg[1] = 9.81f * lsm6ds3_from_fs2g_to_mg(data_raw_acceleration[1]) / 1000.0f;
         acceleration_mg[2] = 9.81f * lsm6ds3_from_fs2g_to_mg(data_raw_acceleration[2]) / 1000.0f;
+
+        apply_mount_matrix(acceleration_mg, R_mount_matrix);
+
         imu_data_ready = true;
     }
 
@@ -528,9 +528,12 @@ void poll_lsm6ds3(void)
         data_raw_angular_rate[1] -= gyro_bias[1];
         data_raw_angular_rate[2] -= gyro_bias[2];
 
-        angular_rate_mdps[0] = lsm6ds3_from_fs2000dps_to_mdps(data_raw_angular_rate[0]) / 1000.0f;
-        angular_rate_mdps[1] = lsm6ds3_from_fs2000dps_to_mdps(data_raw_angular_rate[1]) / 1000.0f;
-        angular_rate_mdps[2] = lsm6ds3_from_fs2000dps_to_mdps(data_raw_angular_rate[2]) / 1000.0f;
+        angular_rate_dps[0] = lsm6ds3_from_fs2000dps_to_mdps(data_raw_angular_rate[0]) / 1000.0f;
+        angular_rate_dps[1] = lsm6ds3_from_fs2000dps_to_mdps(data_raw_angular_rate[1]) / 1000.0f;
+        angular_rate_dps[2] = lsm6ds3_from_fs2000dps_to_mdps(data_raw_angular_rate[2]) / 1000.0f;
+
+        apply_mount_matrix(angular_rate_dps, R_mount_matrix);
+
         imu_data_ready = true;
     }
 }
@@ -543,6 +546,7 @@ void poll_lis3mdl(void)
     if (reg)
     {
         lis3mdl_magnetic_raw_get(&dev_ctx_mag, data_raw_magnetic);
+
         data_raw_magnetic[0] -= mag_bias[0];
         data_raw_magnetic[1] -= mag_bias[1];
         data_raw_magnetic[2] -= mag_bias[2];
@@ -550,11 +554,14 @@ void poll_lis3mdl(void)
         data_raw_magnetic[0] *= mag_scale[0];
         data_raw_magnetic[1] *= mag_scale[1];
         data_raw_magnetic[2] *= mag_scale[2];
-        printf("Mag raw: %d %d %d\n", data_raw_magnetic[0], data_raw_magnetic[1], data_raw_magnetic[2]);
+
+        //printf("Mag raw: %d %d %d\n", data_raw_magnetic[0], data_raw_magnetic[1], data_raw_magnetic[2]);
 
         magnetic_mG[0] = 1000 * lis3mdl_from_fs16_to_gauss(data_raw_magnetic[0]);
         magnetic_mG[1] = 1000 * lis3mdl_from_fs16_to_gauss(data_raw_magnetic[1]);
         magnetic_mG[2] = 1000 * lis3mdl_from_fs16_to_gauss(data_raw_magnetic[2]);
+
+        apply_mount_matrix(magnetic_mG, R_mount_matrix);
 
         lis3mdl_temperature_raw_get(&dev_ctx_mag, &data_raw_temperature);
         mag_temperature_degC = lis3mdl_from_lsb_to_celsius(data_raw_temperature);
@@ -665,11 +672,13 @@ void imu_poll(void)
     int64_t now = esp_timer_get_time();
     double dt = (double)(now - last_time_imu) / 1e6;
 
+    // printf("dt: %f\n", dt);
+
     last_time_imu = now;
 
     if (imu_data_ready && mag_data_ready)
     {
-        estimate_position_orientation(acceleration_mg, angular_rate_mdps, magnetic_mG, dt);
+        estimate_position_orientation(acceleration_mg, angular_rate_dps, magnetic_mG, dt);
     }
 }
 

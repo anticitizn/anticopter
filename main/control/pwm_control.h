@@ -99,7 +99,7 @@ void motors_tick()
 
 void set_motor_pwm(int motor_i, int duty_cycle)
 {
-    // desired_motor_pwm[motor_i] = duty_cycle;
+    desired_motor_pwm[motor_i] = duty_cycle;
 
     int led_val = (int)(duty_cycle / 10);
     set_led(motor_i, led_val, led_val, led_val);

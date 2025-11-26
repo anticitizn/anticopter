@@ -16,16 +16,30 @@ const char *TAG = "ANTICOPTER";
 #include "control/pid_control.h"
 #include "udp.h"
 
-void control_sensor_loop()
+void control_task(void *arg)
+{
+    TickType_t last = xTaskGetTickCount();
+
+    while (true)
+    {
+        imu_poll();
+        pid_tick();
+        motors_tick();
+
+        // 200 Hz control loop (5ms)
+        vTaskDelayUntil(&last, pdMS_TO_TICKS(10));
+    }
+}
+
+void camera_task(void *arg)
 {
     while (true)
     {
-        cam_take_picture();
-        motors_tick();
-        imu_poll();
-        pid_tick();
+        cam_take_picture();  
+        vTaskDelay(1);   // yield
     }
 }
+
 
 void app_main()
 {
@@ -70,8 +84,10 @@ void app_main()
 
     imu_init();
 
-    xTaskCreatePinnedToCore(control_sensor_loop, "control_sensor_loop", 4096, NULL, 5, NULL, 0);
+    xTaskCreatePinnedToCore(control_task, "control", 4096, NULL, 10, NULL, 0);
+    xTaskCreatePinnedToCore(camera_task, "camera", 4096, NULL, 5, NULL, 1);
     xTaskCreatePinnedToCore(udp_server_task, "udp_server", 4096, (void*)AF_INET, 5, NULL, 1);
+
     ESP_LOGI(TAG, "Anticopter software is up and running\n");
     
 }
