@@ -14,7 +14,6 @@
 #include "driver/sdmmc_defs.h"
 #include "sdmmc_cmd.h"
 
-
 #define CONFIG_XCLK_FREQ 20000000
 
 // Camera pins
@@ -46,13 +45,16 @@ static esp_err_t save_picture_to_file(const uint8_t *buf, size_t len)
     char path[64];
     snprintf(path, sizeof(path), "/sdcard/%d.jpg", file_index++);
     FILE *f = fopen(path, "wb");
-    if (!f) {
+    if (!f) 
+    {
         ESP_LOGE("SD", "Failed to open file for writing: %s", path);
         return ESP_FAIL;
     }
+
     fwrite(buf, 1, len, f);
     fclose(f);
     ESP_LOGI("SD", "Saved file: %s (%d bytes)", path, len);
+
     return ESP_OK;
 }
 
@@ -81,7 +83,8 @@ static esp_err_t init_sdcard(void)
 
     sdmmc_card_t* card;
     ret = esp_vfs_fat_sdmmc_mount("/sdcard", &host, &slot_config, &mount_config, &card);
-    if (ret != ESP_OK) {
+    if (ret != ESP_OK) 
+    {
         ESP_LOGE("SD", "Failed to mount SD card: %s", esp_err_to_name(ret));
         return ret;
     }
@@ -118,9 +121,9 @@ static esp_err_t init_camera(void)
                                      .pixel_format = PIXFORMAT_JPEG,
                                      .frame_size = FRAMESIZE_HD,
 
-                                     .jpeg_quality = 12,
+                                     .jpeg_quality = 12, // 0-63, lower number = higher quality
                                      .fb_count = 2,
-                                     .grab_mode = CAMERA_GRAB_LATEST}; // CAMERA_GRAB_LATEST. Sets when buffers should be filled
+                                     .grab_mode = CAMERA_GRAB_LATEST};
     esp_err_t err = esp_camera_init(&camera_config);
     if (err != ESP_OK)
     {
