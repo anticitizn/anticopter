@@ -40,6 +40,7 @@
     "pid_control.h": "c",
     "led.h": "c",
     "ratio": "c",
+    "esp_event.h": "c"
   },
   "C_Cpp.errorSquiggles": "disabled",
   "idf.espIdfPath": "/home/danny/.esp/v5.3.1/esp-idf",

@@ -471,8 +471,8 @@ void init_lsm6ds3(void)
     lsm6ds3_xl_full_scale_set(&dev_ctx_imu, LSM6DS3_2g);
     lsm6ds3_gy_full_scale_set(&dev_ctx_imu, LSM6DS3_2000dps);
 
-    lsm6ds3_xl_data_rate_set(&dev_ctx_imu, LSM6DS3_XL_ODR_104Hz);
-    lsm6ds3_gy_data_rate_set(&dev_ctx_imu, LSM6DS3_GY_ODR_104Hz);
+    lsm6ds3_xl_data_rate_set(&dev_ctx_imu, LSM6DS3_XL_ODR_416Hz);
+    lsm6ds3_gy_data_rate_set(&dev_ctx_imu, LSM6DS3_GY_ODR_416Hz);
 
     calibrate_gyro(&dev_ctx_imu);
 }
@@ -493,7 +493,7 @@ void init_lis3mdl(void)
 
     lis3mdl_block_data_update_set(&dev_ctx_mag, PROPERTY_ENABLE);
 
-    lis3mdl_data_rate_set(&dev_ctx_mag, LIS3MDL_UHP_155Hz);
+    lis3mdl_data_rate_set(&dev_ctx_mag, LIS3MDL_MP_560Hz);
     lis3mdl_full_scale_set(&dev_ctx_mag, LIS3MDL_16_GAUSS);
     lis3mdl_temperature_meas_set(&dev_ctx_mag, PROPERTY_ENABLE);
     lis3mdl_operating_mode_set(&dev_ctx_mag, LIS3MDL_CONTINUOUS_MODE);

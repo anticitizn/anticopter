@@ -27,7 +27,7 @@ void control_task(void *arg)
         motors_tick();
 
         // 200 Hz control loop (5ms)
-        vTaskDelayUntil(&last, pdMS_TO_TICKS(10));
+        //vTaskDelayUntil(&last, pdMS_TO_TICKS(10));
     }
 }
 

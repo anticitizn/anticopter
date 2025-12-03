@@ -54,19 +54,19 @@ void pid_init()
     //
     // -------- RATE (INNER) LOOP --------
     //
-    roll_rate_pid.fKp = 0.12f;
-    roll_rate_pid.fKi = 0.08f;
-    roll_rate_pid.fKd = 0.003f;
+    roll_rate_pid.fKp = 0.1f;
+    roll_rate_pid.fKi = 0;
+    roll_rate_pid.fKd = 0;
     roll_rate_pid.fUpOutLim  =  100.0f;
     roll_rate_pid.fLowOutLim = -100.0f;
-    roll_rate_pid.fUpIntLim  =  50.0f;
-    roll_rate_pid.fLowIntLim = -50.0f;
+    roll_rate_pid.fUpIntLim  =  0.0f;
+    roll_rate_pid.fLowIntLim =  0.0f;
 
     pitch_rate_pid = roll_rate_pid;
 
     yaw_rate_pid = roll_rate_pid;
     yaw_rate_pid.fKp = 0.20f;
-    yaw_rate_pid.fKi = 0.10f;
+    yaw_rate_pid.fKi = 0.04f;
     yaw_rate_pid.fKd = 0.000f;
 }
 
@@ -75,7 +75,7 @@ void pid_init()
 //
 void pid_tick()
 {
-    if (throttle_cmd < 10)
+    if (throttle_cmd < 1)
     {
         pid_reset(&roll_angle_pid);
         pid_reset(&pitch_angle_pid);
@@ -88,6 +88,7 @@ void pid_tick()
 
     int64_t now = esp_timer_get_time();
     double dt = (double)(now - last_time) / 1e6;
+    // printf("Dt: %f\n", dt);
 
     last_time = now;
 
@@ -104,7 +105,7 @@ void pid_tick()
     //
     float roll_deg  = orientation[0];
     float pitch_deg = orientation[1];
-    float yaw_deg   = orientation[2];
+    float yaw_deg   = -orientation[2];
 
     float roll_rate  = angular_rate_dps[0];
     float pitch_rate = angular_rate_dps[1];
@@ -123,7 +124,7 @@ void pid_tick()
 
     pitch_angle_pid.fIn = e_pitch;
     pitch_angle_pid.m_calc(&pitch_angle_pid);
-    float pitch_rate_target = pitch_angle_pid.fOut;
+    float pitch_rate_target = pitch_target_deg;
 
     yaw_angle_pid.fIn   = e_yaw;
     yaw_angle_pid.m_calc(&yaw_angle_pid);
@@ -134,6 +135,7 @@ void pid_tick()
     //
     float roll_err_rate  = roll_rate_target  - roll_rate;
     float pitch_err_rate = pitch_rate_target - pitch_rate;
+    printf("pitch error rate: %f\n", pitch_err_rate);
     float yaw_err_rate   = yaw_rate_target   - yaw_rate;
 
     roll_rate_pid.fIn  = roll_err_rate;
@@ -160,10 +162,17 @@ void pid_tick()
     // roll = rotate around x
     // pitch = rotate around y
     // yaw = rotate around z
-    float m0 = throttle_cmd - roll_cmd + pitch_cmd - yaw_cmd;
-    float m1 = throttle_cmd - roll_cmd - pitch_cmd + yaw_cmd;
-    float m2 = throttle_cmd + roll_cmd - pitch_cmd - yaw_cmd;
-    float m3 = throttle_cmd + roll_cmd + pitch_cmd + yaw_cmd;
+    // og
+    // float m0 = throttle_cmd - roll_cmd + pitch_cmd - yaw_cmd;
+    // float m1 = throttle_cmd - roll_cmd - pitch_cmd + yaw_cmd;
+    // float m2 = throttle_cmd + roll_cmd - pitch_cmd - yaw_cmd;
+    // float m3 = throttle_cmd + roll_cmd + pitch_cmd + yaw_cmd;
+
+    // testing only
+    float m0 = throttle_cmd + pitch_cmd;
+    float m1 = throttle_cmd - pitch_cmd;
+    float m2 = throttle_cmd - pitch_cmd;
+    float m3 = throttle_cmd + pitch_cmd;
 
     // Clamp 0-100%
     if (m0 < 0) m0 = 0; 
@@ -175,15 +184,17 @@ void pid_tick()
     if (m3 < 0) m3 = 0; 
     if (m3 > 100) m3 = 100;
 
+    printf("Motors PWM: %f %f %f %f\n", m0, m1, m2, m3);
+
     //
     // 5. Output to motors
     //
     if (throttle_cmd > 1)
     {
-        set_motor_pwm(0, (int)m0);
-        set_motor_pwm(1, (int)m1);
-        set_motor_pwm(2, (int)m2);
-        set_motor_pwm(3, (int)m3);
+        set_motor_pwm(0, m0);
+        set_motor_pwm(1, m1);
+        set_motor_pwm(2, m2);
+        set_motor_pwm(3, m3);
     }
     else
     {

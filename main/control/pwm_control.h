@@ -17,12 +17,12 @@
 
 #define PWM_CHANNEL_BASE LEDC_CHANNEL_1
 #define PWM_TIMER_BASE LEDC_TIMER_1
-#define PWM_FREQ_HZ 16000
+#define PWM_FREQ_HZ 40000
 #define PWM_RESOLUTION LEDC_TIMER_10_BIT
 
 // The higher the beta value, the faster the actual PWM value reaches the desired PWM
-#define LPF_BETA_LOW 0.2   // This is used for current PWM values under 30
-# define LPF_BETA_HIGH 0.5 // This is used for current PWM values equal to or over 30
+#define LPF_BETA_LOW 1.0   // This is used for current PWM values under 40
+# define LPF_BETA_HIGH 1.0 // This is used for current PWM values equal to or over 40
 
 float current_motor_pwm[4] = {0};
 float desired_motor_pwm[4] = {0};
@@ -55,16 +55,16 @@ void setup_pwm()
 
 // Set the PWM value of one motor
 // duty_cycle is in percentages, between 0 and 100
-static void motor_pwm(int motor_i, int duty_cycle)
+static void motor_pwm(int motor_i, float duty_cycle)
 {
     // Set the duty cycle
-    ledc_set_duty(LEDC_LOW_SPEED_MODE, PWM_CHANNEL_BASE + motor_i, duty_cycle * ((1 << LEDC_TIMER_13_BIT) - 1) / 100);
+    ledc_set_duty(LEDC_LOW_SPEED_MODE, PWM_CHANNEL_BASE + motor_i, (int)((duty_cycle * (1 << PWM_RESOLUTION)) / 100));
     ledc_update_duty(LEDC_LOW_SPEED_MODE, PWM_CHANNEL_BASE + motor_i);
 }
 
 // Set the PWM value of all motors
 // duty_cycle is in percentages, between 0 and 100
-static void motors_pwm(int duty_cycle)
+static void motors_pwm(float duty_cycle)
 {
     for (int i = 0; i < 4; i++)
     {
@@ -82,7 +82,7 @@ void motors_tick()
         // (also it is useful to be able to stop all motors immediately)
         if (desired_motor_pwm[i] > current_motor_pwm[i])
         {
-            float beta = current_motor_pwm[i] >= 30 ? LPF_BETA_HIGH : LPF_BETA_LOW;
+            float beta = current_motor_pwm[i] >= 40 ? LPF_BETA_HIGH : LPF_BETA_LOW;
             int smoothed_duty_cycle = (int)floor(lpf_smooth(current_motor_pwm[i], desired_motor_pwm[i], beta));
             motor_pwm(i, smoothed_duty_cycle);
             current_motor_pwm[i] = smoothed_duty_cycle;
@@ -97,12 +97,12 @@ void motors_tick()
     }
 }
 
-void set_motor_pwm(int motor_i, int duty_cycle)
+void set_motor_pwm(int motor_i, float duty_cycle)
 {
     desired_motor_pwm[motor_i] = duty_cycle;
 
-    int led_val = (int)(duty_cycle / 10);
-    set_led(motor_i, led_val, led_val, led_val);
+    // int led_val = (int)(duty_cycle);
+    // set_led(motor_i, led_val, led_val, led_val);
 }
 
 // Spin each motor very briefly at low power in sequence
