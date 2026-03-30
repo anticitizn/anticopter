@@ -33,9 +33,9 @@ static float ahrs_time  = 0.0f;
 
 // Tunable gains
 static float Kp_acc = 2.0f;     // accel correction uses dynamic Kp
-static float Kp_mag = 0.35f; // smaller constant mag correction gain
-static float Ki_acc = 0.005f;          // integral only from accel error
-static float alpha_mag = 0.2f;     // magnetometer low-pass alpha (0 < alpha < 1, lower = more smoothing)
+static float Kp_mag = 0.0f;     // smaller constant mag correction gain
+static float Ki_acc = 0.005f;   // integral only from accel error
+static float alpha_mag = 0.2f;  // magnetometer low-pass alpha (0 < alpha < 1, lower = more smoothing)
 
 // Magnetometer LPF
 static float mag_lp[3] = {0.0f, 0.0f, 0.0f};
@@ -679,6 +679,8 @@ void imu_poll(void)
     if (imu_data_ready && mag_data_ready)
     {
         estimate_position_orientation(acceleration_mg, angular_rate_dps, magnetic_mG, dt);
+        imu_data_ready = false;
+        mag_data_ready = false;
     }
 }
 

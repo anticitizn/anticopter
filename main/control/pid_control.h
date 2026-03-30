@@ -66,8 +66,11 @@ void pid_init()
 
     yaw_rate_pid = roll_rate_pid;
     yaw_rate_pid.fKp = 0.20f;
-    yaw_rate_pid.fKi = 0.04f;
+    yaw_rate_pid.fKi = 0.15f;
     yaw_rate_pid.fKd = 0.000f;
+
+    yaw_rate_pid.fUpIntLim  =  15.0f;
+    yaw_rate_pid.fLowIntLim =  -15.0f;
 }
 
 //
@@ -105,11 +108,11 @@ void pid_tick()
     //
     float roll_deg  = orientation[0];
     float pitch_deg = orientation[1];
-    float yaw_deg   = -orientation[2];
+    float yaw_deg   = orientation[2];
 
     float roll_rate  = angular_rate_dps[0];
     float pitch_rate = angular_rate_dps[1];
-    float yaw_rate   = -angular_rate_dps[2];
+    float yaw_rate   = angular_rate_dps[2];
 
     //
     // 2. Angle error -> desired rates (outer loop)
@@ -120,23 +123,29 @@ void pid_tick()
 
     roll_angle_pid.fIn  = e_roll;
     roll_angle_pid.m_calc(&roll_angle_pid);
-    float roll_rate_target = roll_angle_pid.fOut;
+    // Disable outer loop for testing
+    //float roll_rate_target = roll_angle_pid.fOut;
+    float roll_rate_target = roll_target_deg;
 
     pitch_angle_pid.fIn = e_pitch;
     pitch_angle_pid.m_calc(&pitch_angle_pid);
+    // Disable outer loop for testing
+    //float pitch_rate_target = pitch_angle_pid.fOut;
     float pitch_rate_target = pitch_target_deg;
 
     yaw_angle_pid.fIn   = e_yaw;
     yaw_angle_pid.m_calc(&yaw_angle_pid);
-    float yaw_rate_target = yaw_angle_pid.fOut;
+    // Disable outer loop for testing
+    //float yaw_rate_target = yaw_angle_pid.fOut;
+    float yaw_rate_target = yaw_target_deg;
 
     //
     // 3. Rate error -> control torque (inner loop)
     //
     float roll_err_rate  = roll_rate_target  - roll_rate;
     float pitch_err_rate = pitch_rate_target - pitch_rate;
-    printf("pitch error rate: %f\n", pitch_err_rate);
     float yaw_err_rate   = yaw_rate_target   - yaw_rate;
+    // printf("error rate: roll %f, pitch %f, yaw %f\n", roll_err_rate, pitch_err_rate, yaw_err_rate);
 
     roll_rate_pid.fIn  = roll_err_rate;
     roll_rate_pid.m_calc(&roll_rate_pid);
@@ -149,6 +158,7 @@ void pid_tick()
     yaw_rate_pid.fIn   = yaw_err_rate;
     yaw_rate_pid.m_calc(&yaw_rate_pid);
     float yaw_cmd = yaw_rate_pid.fOut;
+    printf("rate command: roll %f, pitch %f, yaw %f\n", roll_cmd, pitch_cmd, yaw_cmd);
 
     // printf("Orientation target: %f %f %f\n", roll_target_deg, pitch_target_deg, yaw_target_deg);
     // printf("Orientation: %f %f %f\n", roll_deg, pitch_deg, yaw_deg);
@@ -162,17 +172,12 @@ void pid_tick()
     // roll = rotate around x
     // pitch = rotate around y
     // yaw = rotate around z
-    // og
-    // float m0 = throttle_cmd - roll_cmd + pitch_cmd - yaw_cmd;
-    // float m1 = throttle_cmd - roll_cmd - pitch_cmd + yaw_cmd;
-    // float m2 = throttle_cmd + roll_cmd - pitch_cmd - yaw_cmd;
-    // float m3 = throttle_cmd + roll_cmd + pitch_cmd + yaw_cmd;
 
-    // testing only
-    float m0 = throttle_cmd + pitch_cmd;
-    float m1 = throttle_cmd - pitch_cmd;
-    float m2 = throttle_cmd - pitch_cmd;
-    float m3 = throttle_cmd + pitch_cmd;
+    float m0 = throttle_cmd - roll_cmd + pitch_cmd - yaw_cmd;
+    float m1 = throttle_cmd - roll_cmd - pitch_cmd + yaw_cmd;
+    float m2 = throttle_cmd + roll_cmd - pitch_cmd - yaw_cmd;
+    float m3 = throttle_cmd + roll_cmd + pitch_cmd + yaw_cmd;
+
 
     // Clamp 0-100%
     if (m0 < 0) m0 = 0; 
