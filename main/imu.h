@@ -1,14 +1,16 @@
 #ifndef ANTICOPTER_IMU
 #define ANTICOPTER_IMU
 
+#include <stdio.h>
+#include <math.h>
+#include <string.h>
+
 #include "driver/i2c.h"
 #include "esp_log.h"
 #include "lsm6ds3/lsm6ds3_reg.h"
 #include "lis3mdl/lis3mdl_reg.h"
 #include "camera.h"
-#include <stdio.h>
-#include <math.h>
-#include <string.h>
+#include "comms/msg_send.h"
 
 /* ---------------------------------------------------------
    I2C Configuration
@@ -735,6 +737,18 @@ void handle_imu_telemetry(const void *payload)
     msg_imu.temperature_degC = temperature_degC;
     
     send_message(msg_header, &msg_imu);
+}
+
+void handle_cfg_imu(const void *payload)
+{
+    msg_cfg_imu_t* msg = (msg_cfg_imu_t*)payload;
+
+    Kp_acc = msg->Kp_acc;
+    Kp_mag = msg->Kp_mag;
+    Ki_acc = msg->Ki_acc;
+    alpha_mag = msg->alpha_mag;
+    memcpy(&mag_bias, &msg->mag_bias, sizeof(mag_bias));
+    memcpy(&mag_scale, &msg->mag_scale, sizeof(mag_bias));
 }
 
 #endif

@@ -9,6 +9,8 @@
 #include <esp_timer.h>
 #include <esp_log.h>
 
+#include "comms/msg_send.h"
+
 #include "esp_vfs_fat.h"
 #include "driver/sdmmc_host.h"
 #include "driver/sdmmc_defs.h"
@@ -17,8 +19,8 @@
 #define CONFIG_XCLK_FREQ 20000000
 
 // Camera pins
-#define CAM_PIN_PWDN -1  // power down is not used
-#define CAM_PIN_RESET -1 // software reset will be performed
+#define CAM_PIN_PWDN -1  // power down is NC
+#define CAM_PIN_RESET -1 // reset pin is NC, software reset used instead
 #define CAM_PIN_XCLK 13
 #define CAM_PIN_SIOD 45
 #define CAM_PIN_SIOC 48
@@ -38,25 +40,12 @@
 size_t _jpg_buf_len;
 uint8_t *_jpg_buf;
 
-static int file_index = 0;
+static SemaphoreHandle_t cam_mutex;
+int file_index = 0;
 
-static esp_err_t save_picture_to_file(const uint8_t *buf, size_t len)
-{
-    char path[64];
-    snprintf(path, sizeof(path), "/sdcard/%d.jpg", file_index++);
-    FILE *f = fopen(path, "wb");
-    if (!f) 
-    {
-        ESP_LOGE("SD", "Failed to open file for writing: %s", path);
-        return ESP_FAIL;
-    }
-
-    fwrite(buf, 1, len, f);
-    fclose(f);
-    ESP_LOGI("SD", "Saved file: %s (%d bytes)", path, len);
-
-    return ESP_OK;
-}
+// Recording state
+static FILE *record_file = NULL;
+static bool is_recording = false;
 
 static esp_err_t init_sdcard(void)
 {
@@ -93,8 +82,30 @@ static esp_err_t init_sdcard(void)
     return ESP_OK;
 }
 
+static esp_err_t append_frame_to_recording(const uint8_t *buf, size_t len)
+{
+    if (!is_recording || !record_file)
+    {
+        return ESP_OK;
+    }
 
-static esp_err_t init_camera(void)
+    // Write raw JPEG frame directly into the MJPEG stream.
+    // Many MJPEG readers can parse concatenated JPEG images.
+    size_t written = fwrite(buf, 1, len, record_file);
+    if (written != len)
+    {
+        ESP_LOGE("SD", "Failed to write MJPEG frame");
+        fclose(record_file);
+        record_file = NULL;
+        is_recording = false;
+        return ESP_FAIL;
+    }
+
+    fflush(record_file);
+    return ESP_OK;
+}
+
+static esp_err_t init_camera(camera_resolution_t resolution, uint8_t jpeg_quality)
 {
     camera_config_t camera_config = {.pin_pwdn = CAM_PIN_PWDN,
                                      .pin_reset = CAM_PIN_RESET,
@@ -119,9 +130,9 @@ static esp_err_t init_camera(void)
                                      .ledc_channel = LEDC_CHANNEL_0,
 
                                      .pixel_format = PIXFORMAT_JPEG,
-                                     .frame_size = FRAMESIZE_HD,
+                                     .frame_size = resolution,
 
-                                     .jpeg_quality = 12, // 0-63, lower number = higher quality
+                                     .jpeg_quality = jpeg_quality, // 0-63, lower number = higher quality
                                      .fb_count = 2,
                                      .grab_mode = CAMERA_GRAB_LATEST};
     esp_err_t err = esp_camera_init(&camera_config);
@@ -133,6 +144,8 @@ static esp_err_t init_camera(void)
     sensor_t *sensor = esp_camera_sensor_get();
     sensor->set_vflip(sensor, true);
     sensor->set_hmirror(sensor, true);
+
+    cam_mutex = xSemaphoreCreateMutex();
 
     return ESP_OK;
 }
@@ -149,6 +162,7 @@ void cam_take_picture()
         last_frame = esp_timer_get_time();
     }
 
+    xSemaphoreTake(cam_mutex, portMAX_DELAY);
     fb = esp_camera_fb_get();
     if (!fb)
     {
@@ -161,18 +175,93 @@ void cam_take_picture()
     _jpg_buf_len = fb->len;
     _jpg_buf = fb->buf;
 
-    //save_picture_to_file(fb->buf, fb->len);
+    if (is_recording)
+    {
+        append_frame_to_recording(fb->buf, fb->len);
+    }
 
     esp_camera_fb_return(fb);
+    xSemaphoreGive(cam_mutex);
 
     int64_t fr_end = esp_timer_get_time();
-    int64_t frame_time = fr_end - last_frame;
+    int64_t frame_time = (fr_end - last_frame) / 1000;
     last_frame = fr_end;
-    frame_time /= 1000;
     //ESP_LOGI(TAG, "MJPG: %uKB %ums (%.1ffps)", (unsigned int)(_jpg_buf_len / 1024), (unsigned int)frame_time, 1000.0 / (unsigned int)frame_time);
 
-
     last_frame = 0;    
+}
+
+static esp_err_t camera_apply_settings(framesize_t resolution, int jpeg_quality)
+{
+    sensor_t *s = esp_camera_sensor_get();
+    if (!s) return ESP_FAIL;
+
+    if (jpeg_quality < 0) jpeg_quality = 0;
+    if (jpeg_quality > 63) jpeg_quality = 63;
+
+    if (s->set_framesize(s, resolution) != 0) return ESP_FAIL;
+    if (s->set_quality(s, jpeg_quality) != 0) return ESP_FAIL;
+
+    return ESP_OK;
+}
+
+void handle_camera_telemetry(const void *payload)
+{
+    msg_header_t msg_header = {
+        .msg_type = MSG_CAMERA,
+        .payload_len = _jpg_buf_len,
+    };
+
+    send_message(msg_header, _jpg_buf);
+}
+
+void handle_cfg_camera(const void *payload)
+{
+    msg_cfg_camera_t* msg = (msg_cfg_camera_t*)payload;
+
+    xSemaphoreTake(cam_mutex, portMAX_DELAY);
+    camera_apply_settings(msg->camera_resolution, msg->compression_rate);
+    xSemaphoreGive(cam_mutex);
+}
+
+void handle_camera_start_recording(const void *payload)
+{
+    char path[64];
+
+    // If already recording, close current file and start a new one
+    if (record_file)
+    {
+        fclose(record_file);
+        record_file = NULL;
+    }
+
+    snprintf(path, sizeof(path), "/sdcard/%d.mjpeg", file_index++);
+    record_file = fopen(path, "wb");
+    if (!record_file)
+    {
+        ESP_LOGE("SD", "Failed to open recording file: %s", path);
+        is_recording = false;
+    }
+
+    is_recording = true;
+    ESP_LOGI("SD", "Started recording: %s", path);
+}
+
+void handle_camera_stop_recording(const void *payload)
+{
+    if (record_file)
+    {
+        fflush(record_file);
+        fclose(record_file);
+        record_file = NULL;
+    }
+
+    if (is_recording)
+    {
+        ESP_LOGI("SD", "Stopped recording");
+    }
+
+    is_recording = false;
 }
 
 #endif

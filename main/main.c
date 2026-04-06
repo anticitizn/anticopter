@@ -45,17 +45,20 @@ void app_main()
 {
     init_leds();
 
-    set_led(0, 50, 0, 0);
-    set_led(1, 50, 0, 0);
-    set_led(2, 50, 0, 0);
-    set_led(3, 50, 0, 0);
+    // Little LED bootup animation
+    for (int i = 0; i < 4; i++)
+    {
+        set_led(i, 50, 50, 50);
+        vTaskDelay(200 / portTICK_PERIOD_MS);
+    }
 
-    vTaskDelay(1000 / portTICK_PERIOD_MS);
+    for (int i = 0; i < 4; i++)
+    {
+        set_led(i, 0, 0, 0);
+        vTaskDelay(200 / portTICK_PERIOD_MS);
+    }
 
-    set_led(0, 0, 0, 0);
-    set_led(1, 0, 0, 0);
-    set_led(2, 0, 0, 0);
-    set_led(3, 0, 0, 0);
+    set_leds(30, 0, 0);
 
     setup_pwm();
     motors_check();
@@ -74,7 +77,7 @@ void app_main()
 
     wifi_init_softap();
 
-    err = init_camera();
+    err = init_camera(FRAMESIZE_HD, 12);
     err = init_sdcard();
     if (err != ESP_OK)
     {

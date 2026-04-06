@@ -1,3 +1,7 @@
+
+#ifndef ANTICOPTER_MSG_HANDLER_H
+#define ANTICOPTER_MSG_HANDLER_H
+
 #include "esp_event.h"
 #include "esp_log.h"
 #include "esp_netif.h"
@@ -17,9 +21,13 @@
 #include "msg_header.h"
 #include "msg_type.h"
 
-#include "imu.h"
-#include "control/pwm_control.h"
-#include "led.h"
+#include "../imu.h"
+#include "../control/pwm_control.h"
+#include "../control/pid_control.h"
+#include "../led.h"
+#include "../camera.h"
+
+uint32_t us_since_comms_init = 0;
 
 typedef void (*msg_handler_t)(const void *payload);
 
@@ -28,7 +36,7 @@ static const msg_handler_t msg_read_handlers[] =
     [MSG_IMU]             = handle_imu_telemetry,
     //[MSG_LOG_TEXT]        = handle_log_telemetry,
     [MSG_PID_INFO]        = handle_pid_telemetry,
-    [MSG_GET_IMAGE]       = handle_camera_telemetry,
+    [MSG_CAMERA]          = handle_camera_telemetry,
 };
 
 static const msg_handler_t msg_write_handlers[] = 
@@ -69,20 +77,12 @@ void handle_packet(msg_header_t *header, uint8_t *data)
     }
 }
 
-
-void send_message(const msg_header_t header, const void *payload)
+// TO-DO: Finalize implementation
+void handle_comms_init_msg(const void *payload)
 {
-    struct iovec iov[2];
-    iov[0].iov_base = &header;
-    iov[0].iov_len  = sizeof(header);
-    iov[1].iov_base = payload;
-    iov[1].iov_len  = header.payload_len;
+    msg_init_t msg_init = (msg_init_t*)payload;
 
-    struct msghdr msg = {0};
-    msg.msg_name = &source_addr;
-    msg.msg_namelen = sizeof(source_addr);
-    msg.msg_iov = iov;
-    msg.msg_iovlen = 2;
-
-    sendmsg(sock, &msg, 0);
+    us_since_comms_init = msg_init.timestamp;
 }
+
+#endif

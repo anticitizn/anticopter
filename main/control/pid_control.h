@@ -1,7 +1,10 @@
 #include "pid.h"
 #include "pwm_control.h"
+#include "comms/msg_send.h"
 
 static int64_t last_time = 0;
+
+msg_control_mode_t control_mode = CFG_MODE_RATE_HOLD;
 
 // Outer loop (angle)
 static tPID roll_angle_pid = PID_DEFAULTS;
@@ -13,10 +16,11 @@ static tPID roll_rate_pid = PID_DEFAULTS;
 static tPID pitch_rate_pid = PID_DEFAULTS;
 static tPID yaw_rate_pid = PID_DEFAULTS;
 
-// Setpoints (set by external commands)
-float roll_target_deg  = 0.0f;
-float pitch_target_deg = 0.0f;
-float yaw_target_deg   = 0.0f;
+// Goal setpoint set by external commands
+// Can be either degrees or degrees per second, depending on control_mode
+float roll_target  = 0.0f;
+float pitch_target = 0.0f;
+float yaw_target   = 0.0f;
 
 // Throttle input (0-100%)
 float throttle_cmd = 0.0f;
@@ -78,6 +82,7 @@ void pid_init()
 //
 void pid_tick()
 {
+    // Prevent windup while unpowered
     if (throttle_cmd < 1)
     {
         pid_reset(&roll_angle_pid);
@@ -117,27 +122,37 @@ void pid_tick()
     //
     // 2. Angle error -> desired rates (outer loop)
     //
-    float e_roll  = roll_target_deg  - roll_deg;
-    float e_pitch = pitch_target_deg - pitch_deg;
-    float e_yaw   = yaw_target_deg   - yaw_deg;
+    float e_roll  = roll_target  - roll_deg;
+    float e_pitch = pitch_target - pitch_deg;
+    float e_yaw   = yaw_target   - yaw_deg;
+
+    float roll_rate_target = 0;
+    float pitch_rate_target = 0;
+    float yaw_rate_target = 0;
 
     roll_angle_pid.fIn  = e_roll;
     roll_angle_pid.m_calc(&roll_angle_pid);
-    // Disable outer loop for testing
-    //float roll_rate_target = roll_angle_pid.fOut;
-    float roll_rate_target = roll_target_deg;
 
     pitch_angle_pid.fIn = e_pitch;
     pitch_angle_pid.m_calc(&pitch_angle_pid);
-    // Disable outer loop for testing
-    //float pitch_rate_target = pitch_angle_pid.fOut;
-    float pitch_rate_target = pitch_target_deg;
 
     yaw_angle_pid.fIn   = e_yaw;
     yaw_angle_pid.m_calc(&yaw_angle_pid);
-    // Disable outer loop for testing
-    //float yaw_rate_target = yaw_angle_pid.fOut;
-    float yaw_rate_target = yaw_target_deg;
+
+    if (control_mode == CFG_MODE_ANGLE_HOLD)
+    {
+        // Outer + inner loop
+        roll_rate_target = roll_angle_pid.fOut;
+        pitch_rate_target = pitch_angle_pid.fOut;
+        yaw_rate_target = yaw_angle_pid.fOut;
+    }
+    else if (control_mode == CFG_MODE_RATE_HOLD)
+    {
+        // Inner loop only
+        roll_rate_target = roll_target;
+        pitch_rate_target = pitch_target;
+        yaw_rate_target = yaw_target;
+    }
 
     //
     // 3. Rate error -> control torque (inner loop)
@@ -160,7 +175,7 @@ void pid_tick()
     float yaw_cmd = yaw_rate_pid.fOut;
     printf("rate command: roll %f, pitch %f, yaw %f\n", roll_cmd, pitch_cmd, yaw_cmd);
 
-    // printf("Orientation target: %f %f %f\n", roll_target_deg, pitch_target_deg, yaw_target_deg);
+    // printf("Orientation target: %f %f %f\n", roll_target, pitch_target, yaw_target);
     // printf("Orientation: %f %f %f\n", roll_deg, pitch_deg, yaw_deg);
     // printf("Angular rate target: %f %f %f\n", roll_rate_target, pitch_rate_target, yaw_rate_target);
     // printf("Angular rate command: %f %f %f\n", roll_cmd, pitch_cmd, yaw_cmd);
@@ -194,30 +209,34 @@ void pid_tick()
     //
     // 5. Output to motors
     //
-    if (throttle_cmd > 1)
+    if (control_mode == CFG_MODE_RATE_HOLD || control_mode == CFG_MODE_ANGLE_HOLD)
     {
-        set_motor_pwm(0, m0);
-        set_motor_pwm(1, m1);
-        set_motor_pwm(2, m2);
-        set_motor_pwm(3, m3);
+        if (throttle_cmd > 1)
+        {
+            set_motor_pwm(0, m0);
+            set_motor_pwm(1, m1);
+            set_motor_pwm(2, m2);
+            set_motor_pwm(3, m3);
+        }
+        else
+        {
+            set_motor_pwm(0, 0);
+            set_motor_pwm(1, 0);
+            set_motor_pwm(2, 0);
+            set_motor_pwm(3, 0);
+        }
     }
-    else
-    {
-        set_motor_pwm(0, 0);
-        set_motor_pwm(1, 0);
-        set_motor_pwm(2, 0);
-        set_motor_pwm(3, 0);
-    }
+    
     
 }
 
 // Update the drone's orientation setpoints
 void pid_set_targets(float roll, float pitch, float yaw, float throttle)
 {
-    roll_target_deg  = roll;
-    pitch_target_deg = pitch;
-    yaw_target_deg   = yaw;
-    throttle_cmd     = throttle;
+    roll_target  = roll;
+    pitch_target = pitch;
+    yaw_target   = yaw;
+    throttle     = throttle;
 }
 
 void populate_pid_state_msg(pid_state_t* pid_state, tPID* pid)
@@ -246,4 +265,52 @@ void handle_pid_telemetry(const void *payload)
     populate_pid_state_msg(&msg_pid_info.angle_yaw_pid_state, &yaw_angle_pid);
     
     send_message(msg_header, &msg_pid_info);
+}
+
+void handle_control_mode_msg(const void *payload)
+{
+    msg_control_mode_t msg = *(msg_control_mode_t*)payload;
+
+    control_mode = msg;
+}
+
+void handle_control_target_msg(const void *payload)
+{
+    msg_control_target_t* msg = (msg_control_target_t*)payload;
+
+    throttle_cmd = msg->throttle;
+    roll_target = msg->roll;
+    pitch_target = msg->pitch;
+    yaw_target = msg->yaw;
+}
+
+void populate_pid_from_cfg_msg(tPID* pid, pid_cfg_t* pid_cfg)
+{
+    pid->fKp = pid_cfg->kP;
+    pid->fKi = pid_cfg->kI;
+    pid->fKd = pid_cfg->kD;
+
+    pid->fUpIntLim = pid_cfg->int_up_lim;
+    pid->fLowIntLim = pid_cfg->int_low_lim;
+}
+
+void handle_cfg_pid(const void *payload)
+{
+    msg_cfg_pid_t* msg = (msg_cfg_pid_t*)payload;
+
+    populate_pid_from_cfg_msg(&roll_rate_pid, &msg->rate_roll_pid);
+    populate_pid_from_cfg_msg(&pitch_rate_pid, &msg->rate_pitch_pid);
+    populate_pid_from_cfg_msg(&yaw_rate_pid, &msg->rate_yaw_pid);
+
+    populate_pid_from_cfg_msg(&roll_angle_pid, &msg->angle_roll_pid);
+    populate_pid_from_cfg_msg(&pitch_angle_pid, &msg->angle_pitch_pid);
+    populate_pid_from_cfg_msg(&yaw_angle_pid, &msg->angle_yaw_pid);
+
+    pid_reset(&roll_angle_pid);
+    pid_reset(&pitch_angle_pid);
+    pid_reset(&yaw_angle_pid);
+
+    pid_reset(&roll_rate_pid);
+    pid_reset(&pitch_rate_pid);
+    pid_reset(&yaw_rate_pid);
 }

@@ -9,6 +9,7 @@
 #include <stdio.h>
 
 #include "../led.h"
+#include "comms/msg_type.h"
 
 #define MOTOR_GPIO_1 39
 #define MOTOR_GPIO_2 40
@@ -22,7 +23,9 @@
 
 // The higher the beta value, the faster the actual PWM value reaches the desired PWM
 #define LPF_BETA_LOW 1.0   // This is used for current PWM values under 40
-# define LPF_BETA_HIGH 1.0 // This is used for current PWM values equal to or over 40
+#define LPF_BETA_HIGH 1.0 // This is used for current PWM values equal to or over 40
+
+bool motors_armed = false;
 
 float current_motor_pwm[4] = {0};
 float desired_motor_pwm[4] = {0};
@@ -57,9 +60,20 @@ void setup_pwm()
 // duty_cycle is in percentages, between 0 and 100
 static void motor_pwm(int motor_i, float duty_cycle)
 {
-    // Set the duty cycle
-    ledc_set_duty(LEDC_LOW_SPEED_MODE, PWM_CHANNEL_BASE + motor_i, (int)((duty_cycle * (1 << PWM_RESOLUTION)) / 100));
-    ledc_update_duty(LEDC_LOW_SPEED_MODE, PWM_CHANNEL_BASE + motor_i);
+    if (motors_armed)
+    {
+        // Set the duty cycle
+        ledc_set_duty(LEDC_LOW_SPEED_MODE, PWM_CHANNEL_BASE + motor_i, (int)((duty_cycle * (1 << PWM_RESOLUTION)) / 100));
+        ledc_update_duty(LEDC_LOW_SPEED_MODE, PWM_CHANNEL_BASE + motor_i);
+    }
+    else
+    {
+        for (int i = 0; i < 4; i++)
+        {
+            ledc_set_duty(LEDC_LOW_SPEED_MODE, PWM_CHANNEL_BASE + i, 0);
+            ledc_update_duty(LEDC_LOW_SPEED_MODE, PWM_CHANNEL_BASE + i);
+        }
+    }
 }
 
 // Set the PWM value of all motors
@@ -78,8 +92,8 @@ void motors_tick()
     for (int i = 0; i < 4; i++)
     {
         // On increasing PWM values, we run the PWM output through a digital low-pass filter to reduce the current inrush spike
-        // When the PWM is decreasing instead, there's no need to do it, so we don't do it
-        // (also it is useful to be able to stop all motors immediately)
+        // When the PWM is decreasing instead, there's no need to do it, so we just don't. This results in control hysteresis, but
+        // seems to be fine for now. (it's also useful/necessary to be able to always stop all motors immediately)
         if (desired_motor_pwm[i] > current_motor_pwm[i])
         {
             float beta = current_motor_pwm[i] >= 40 ? LPF_BETA_HIGH : LPF_BETA_LOW;
@@ -100,9 +114,6 @@ void motors_tick()
 void set_motor_pwm(int motor_i, float duty_cycle)
 {
     desired_motor_pwm[motor_i] = duty_cycle;
-
-    // int led_val = (int)(duty_cycle);
-    // set_led(motor_i, led_val, led_val, led_val);
 }
 
 // Spin each motor very briefly at low power in sequence
@@ -111,7 +122,7 @@ void motors_check()
     for (int i = 0; i < 4; i++)
     {
         // Set motor to 5% duty cycle
-        motor_pwm(i, 1);
+        motor_pwm(i, 3);
 
         // Wait 75 ms
         vTaskDelay(75 / portTICK_PERIOD_MS); 
@@ -123,32 +134,24 @@ void motors_check()
     }
 }
 
-void pwm_motors_main()
+void handle_arm_msg(const void *payload)
 {
-    setup_pwm();
-
-    vTaskDelay(1000 / portTICK_PERIOD_MS); // Delay for 75 ms
-
-    motors_check();
-
-    for (int i = 0; i < 100; i++)
-    {
-        motors_pwm(i);
-    }
-
-    vTaskDelay(5000 / portTICK_PERIOD_MS);
-
-    for (int i = 0; i < 4; i++)
-    {
-        // Turn off PWM
-        ledc_stop(LEDC_LOW_SPEED_MODE, PWM_CHANNEL_BASE + i, 0);
-    }
-
-    vTaskDelay(3000 / portTICK_PERIOD_MS);
-
-    motors_check();
-
-    vTaskDelete(NULL); // This task does not need to run continuously
+    motors_armed = true;
+    set_leds(0, 30, 0);
 }
+
+void handle_disarm_msg(const void *payload)
+{
+    motors_armed = false;
+    set_leds(30, 0, 0);
+}
+
+void handle_motor_pwm_msg(const void *payload)
+{
+    msg_control_motor_pwm_t* msg = (msg_control_motor_pwm_t*)payload;
+
+    memcpy(&desired_motor_pwm, &msg->pwm, sizeof(msg->pwm));
+}
+
 
 #endif

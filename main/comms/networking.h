@@ -1,3 +1,7 @@
+
+#ifndef ANTICOPTER_MSG_NETWORKING_H
+#define ANTICOPTER_MSG_NETWORKING_H
+
 #include "esp_event.h"
 #include "esp_log.h"
 #include "esp_netif.h"
@@ -107,3 +111,5 @@ static void udp_server_task(void *pvParameters)
     }
     vTaskDelete(NULL);
 }
+
+#endif

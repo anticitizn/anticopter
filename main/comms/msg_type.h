@@ -1,5 +1,6 @@
-#ifndef ANTICOPTER_MSG
-#define ANTICOPTER_MSG
+
+#ifndef ANTICOPTER_MSG_TYPE_H
+#define ANTICOPTER_MSG_TYPE_H
 
 typedef enum 
 {
@@ -27,7 +28,7 @@ typedef enum
     MSG_PID_INFO           = 42,
 
     // Camera
-    MSG_GET_IMAGE          = 50,
+    MSG_CAMERA             = 50,
     MSG_START_RECORDING    = 51,
     MSG_STOP_RECORDING     = 52,
 } msg_type_t;
@@ -58,7 +59,7 @@ typedef struct
 // Individual motor PWM control
 typedef struct
 {
-    uint8_t pwm[4];
+    float pwm[4];
 } msg_control_motor_pwm_t;
 
 // IMU configuration
@@ -80,13 +81,9 @@ typedef struct
     float kI; // Integral term
     float kD; // Derivative term
 
-    // Output limits / clamping values
-    float out_up_lim;
-    float out_low_lim;
-
     // Integral limits / integral clamping values
     float int_up_lim;
-    float low_int_lim;
+    float int_low_lim;
 } pid_cfg_t;
 
 typedef struct
@@ -103,19 +100,19 @@ typedef struct
 // LED configuration
 typedef struct
 {
-    uint32_t pwm[4][3];
+    uint32_t pwm[4 * 3];
 } msg_cfg_led_t;
 
 // Camera configuration
 typedef enum
 {
-    FRAMESIZE_QVGA,     // 320x240
-    FRAMESIZE_HVGA,     // 480x320
-    FRAMESIZE_VGA,      // 640x480
-    FRAMESIZE_SVGA,     // 800x600
-    FRAMESIZE_XGA,      // 1024x768
-    FRAMESIZE_HD,       // 1280x720
-    FRAMESIZE_UXGA,     // 1600x1200
+    QVGA = FRAMESIZE_QVGA,     // 320x240
+    HVGA = FRAMESIZE_HVGA,     // 480x320
+    VGA  = FRAMESIZE_VGA,      // 640x480
+    SVGA = FRAMESIZE_SVGA,     // 800x600
+    XGA  = FRAMESIZE_XGA,      // 1024x768
+    HD   = FRAMESIZE_HD,       // 1280x720
+    UXGA = FRAMESIZE_UXGA,     // 1600x1200
 } camera_resolution_t;
 
 typedef struct

@@ -6,6 +6,8 @@
 #include "esp_log.h"
 #include "led_strip/led_strip_encoder.h"
 
+#include "comms/msg_type.h"
+
 #define RMT_LED_STRIP_RESOLUTION_HZ 10000000 // 10MHz resolution, 1 tick = 0.1us (led strip needs a high resolution)
 
 static uint8_t led_strip_pixels[4 * 3];
@@ -42,6 +44,21 @@ void set_led(int num, int r, int g, int b)
 
     ESP_ERROR_CHECK(rmt_transmit(led_chan, led_encoder, led_strip_pixels, sizeof(led_strip_pixels), &tx_config));
     ESP_ERROR_CHECK(rmt_tx_wait_all_done(led_chan, portMAX_DELAY));
+}
+
+void set_leds(int r, int g, int b)
+{
+    for (int i = 0; i < 4; i++)
+    {
+        set_led(i, r, g, b);
+    }
+}
+
+void handle_cfg_led_msg(const void *payload)
+{
+    msg_cfg_led_t* msg = (msg_cfg_led_t*)payload;
+
+    memcpy(&led_strip_pixels, &msg->pwm, sizeof(msg->pwm));
 }
 
 #endif

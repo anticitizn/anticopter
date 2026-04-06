@@ -38,9 +38,9 @@ char data_buffer[256] = {0};
 int sock;
 struct sockaddr_storage source_addr;
 
-extern float roll_target_deg;
-extern float pitch_target_deg;
-extern float yaw_target_deg;
+extern float roll_target;
+extern float pitch_target;
+extern float yaw_target;
 
 // Function to format the data into a string
 void format_data(char *buffer, float *acceleration, float *angular_rate, float temperature, float *orientation) {
@@ -198,9 +198,9 @@ static void udp_server_task(void *pvParameters)
                     if (sscanf(payload, "%f %f %f %f", &throttle, &roll_angle, &pitch_angle, &yaw_angle) == 4)
                     {
                         throttle_cmd = throttle;
-                        roll_target_deg = roll_angle;
-                        pitch_target_deg = pitch_angle;
-                        yaw_target_deg = yaw_angle;
+                        roll_target = roll_angle;
+                        pitch_target = pitch_angle;
+                        yaw_target = yaw_angle;
                         ESP_LOGI(TAG, "CONTROL TARGET: %f | %f %f %f", throttle, roll_angle, pitch_angle, yaw_angle);
                     } 
                     else 
