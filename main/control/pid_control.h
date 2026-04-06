@@ -219,3 +219,31 @@ void pid_set_targets(float roll, float pitch, float yaw, float throttle)
     yaw_target_deg   = yaw;
     throttle_cmd     = throttle;
 }
+
+void populate_pid_state_msg(pid_state_t* pid_state, tPID* pid)
+{
+    pid_state->dt_sec = pid->fDtSec;
+    pid_state->prev_input = pid->fPrevIn;
+    pid_state->integral = pid->fIntegral;
+    pid_state->input = pid->fIn;
+    pid_state->output = pid->fOut;
+}
+
+void handle_pid_telemetry(const void *payload)
+{
+    msg_header_t msg_header = {
+        .msg_type = MSG_PID_INFO,
+        .payload_len = sizeof(msg_pid_info_t),
+    };
+
+    msg_pid_info_t msg_pid_info = {0};
+    populate_pid_state_msg(&msg_pid_info.rate_roll_pid_state, &roll_rate_pid);
+    populate_pid_state_msg(&msg_pid_info.rate_pitch_pid_state, &pitch_rate_pid);
+    populate_pid_state_msg(&msg_pid_info.rate_yaw_pid_state, &yaw_rate_pid);
+
+    populate_pid_state_msg(&msg_pid_info.angle_roll_pid_state, &roll_angle_pid);
+    populate_pid_state_msg(&msg_pid_info.angle_pitch_pid_state, &pitch_angle_pid);
+    populate_pid_state_msg(&msg_pid_info.angle_yaw_pid_state, &yaw_angle_pid);
+    
+    send_message(msg_header, &msg_pid_info);
+}

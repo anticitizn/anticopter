@@ -718,4 +718,23 @@ void imu_init(void)
     orientation_offset[2] = euler_deg[2];
 }
 
+void handle_imu_telemetry(const void *payload)
+{
+    msg_header_t msg_header = {
+        .msg_type = MSG_IMU,
+        .payload_len = sizeof(msg_imu_t),
+    };
+
+    msg_imu_t msg_imu = {0};
+
+    memcpy(msg_imu.acceleration_mg, acceleration_mg, sizeof(msg_imu.acceleration_mg));
+    memcpy(msg_imu.angular_rate_dps, angular_rate_dps, sizeof(msg_imu.angular_rate_dps));
+    memcpy(msg_imu.orientation, orientation, sizeof(msg_imu.orientation));
+    memcpy(msg_imu.magnetic_mG, magnetic_mG, sizeof(msg_imu.magnetic_mG));
+    memcpy(msg_imu.mag_norm, mag_norm, sizeof(msg_imu.mag_norm));
+    msg_imu.temperature_degC = temperature_degC;
+    
+    send_message(msg_header, &msg_imu);
+}
+
 #endif

@@ -1,29 +1,5 @@
-#ifndef ANTICOPTER_COMMS_HEADER
-#define ANTICOPTER_COMMS_HEADER
-
-// Comms message header, 20 bytes long
-typedef struct 
-{
-    uint16_t magic = 0x4452; // Magic number
-    uint8_t  version;        // Protocol version number
-    uint16_t msg_type;       // Message type; see msg_type_t  
-    uint8_t  flags;          // Message flags, see msg_flags_t
-    uint32_t seq;            // Message sequence number (incremented separately for each sender)
-    uint32_t frag_seq;       // If message is fragmented, messages that get split retain the same sequence number, 
-                             // and the fragmentation sequence number is incremented instead
-    uint32_t timestamp;      // Microseconds since communication was established
-    uint16_t payload_len;    // Length of the packet payload in bytes
-} __attribute__((packed)) comms_header;
-
-typedef enum
-{
-    MSG_FLAG_FRAGMENTED = 1 << 0, // If set, the contained data is too large to fit within one packet and has been split
-                                  // across multiple packets, which means that frag_seq has to be considered.
-                                  // This can typically only happen for image and log data
-    MSG_FLAG_WRITE      = 1 << 1, // If set, the sender intends to write data to the receiver
-                                  // If zero, the receiver can safely ignore any attached payload, 
-                                  // but is typically expected to return data as indicated by msg_type
-} msg_flags_t;
+#ifndef ANTICOPTER_MSG
+#define ANTICOPTER_MSG
 
 typedef enum 
 {
@@ -35,7 +11,7 @@ typedef enum
     // Control
     MSG_ARM                = 10,
     MSG_DISARM             = 11,
-    MSG_SET_CONTROL_MODE   = 12,
+    MSG_CONTROL_MODE       = 12,
     MSG_CONTROL_TARGET     = 13,
     MSG_MOTOR_PWM          = 14,
 
@@ -56,14 +32,14 @@ typedef enum
     MSG_STOP_RECORDING     = 52,
 } msg_type_t;
 
-// Control mode
+// Communications init data
 typedef struct
 {
     uint32_t timestamp;
 } msg_init_t;
 
 // Control mode
-typedef struct
+typedef enum
 {
     CFG_MODE_PWM_HOLD,      // Motor PWMs set directly by MSG_MOTOR_PWM
     CFG_MODE_RATE_HOLD,     // Only inner (angular rate PID) controller loop is active, control target defines goal angular rate
@@ -145,7 +121,7 @@ typedef enum
 typedef struct
 {
     uint8_t compression_rate; // 0-63, lower value = higher image quality
-    camera_resolution_t camera_resolution;
+    uint8_t camera_resolution; // See camera_resolution_t
 } msg_cfg_camera_t;
 
 // IMU telemetry
@@ -157,8 +133,8 @@ typedef struct
     float orientation[3];
 
     // Magnetometer data
-    float magnetic_mG[3] = {0};
-    float mag_norm[3] = {0};
+    float magnetic_mG[3];
+    float mag_norm[3];
 
     float temperature_degC;
 } msg_imu_t;
@@ -167,7 +143,7 @@ typedef struct
 typedef struct
 {
     float dt_sec;
-    float prev_integral;
+    float prev_input;
     float integral;
     float input;
     float output;
@@ -182,7 +158,7 @@ typedef struct
     pid_state_t angle_roll_pid_state;
     pid_state_t angle_pitch_pid_state;
     pid_state_t angle_yaw_pid_state;
-} msg_pid_t;
+} msg_pid_info_t;
 
 // Log telemetry
 typedef struct
@@ -194,6 +170,6 @@ typedef struct
 typedef struct
 {
     uint8_t* image_data;
-} msg_log_t;
+} msg_camera_t;
 
 #endif
