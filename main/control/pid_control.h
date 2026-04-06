@@ -1,3 +1,7 @@
+
+#ifndef ANTICOPTER_PID_CONTROL_H
+#define ANTICOPTER_PID_CONTROL_H
+
 #include "pid.h"
 #include "pwm_control.h"
 #include "comms/msg_send.h"
@@ -314,3 +318,5 @@ void handle_cfg_pid(const void *payload)
     pid_reset(&pitch_rate_pid);
     pid_reset(&yaw_rate_pid);
 }
+
+#endif

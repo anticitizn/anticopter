@@ -14,7 +14,7 @@ const char *TAG = "ANTICOPTER";
 #include "led.h"
 #include "control/pwm_control.h"
 #include "control/pid_control.h"
-#include "udp.h"
+#include "comms/networking.h"
 
 void control_task(void *arg)
 {
@@ -89,7 +89,7 @@ void app_main()
 
     xTaskCreatePinnedToCore(control_task, "control", 4096, NULL, 10, NULL, 0);
     xTaskCreatePinnedToCore(camera_task, "camera", 4096, NULL, 5, NULL, 1);
-    xTaskCreatePinnedToCore(udp_server_task, "udp_server", 4096, (void*)AF_INET, 5, NULL, 1);
+    xTaskCreatePinnedToCore(comms_task, "udp_server", 4096, (void*)AF_INET, 5, NULL, 1);
 
     ESP_LOGI(TAG, "Anticopter software is up and running\n");
     

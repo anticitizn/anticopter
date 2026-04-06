@@ -25,7 +25,7 @@
 #include "control/pwm_control.h"
 #include "led.h"
 
-static comms_config_t comms_config = 
+comms_config_t comms_config = 
 {
     .mtu = 64000,
     .magic_number = 322,
@@ -40,7 +40,7 @@ char *payload = rx_buffer + 20;
 int sock;
 struct sockaddr_storage source_addr;
 
-static void udp_server_task(void *pvParameters)
+static void comms_task(void *pvParameters)
 {
     char addr_str[128];
 
@@ -96,7 +96,7 @@ static void udp_server_task(void *pvParameters)
                 inet_ntoa_r(((struct sockaddr_in *)&source_addr)->sin_addr, addr_str, sizeof(addr_str) - 1);
 
                 msg_header_t *hdr = (msg_header_t *)rx_buffer;
-                handle_packet(hdr, (uint8_t*)payload;)
+                handle_packet(hdr, (uint8_t*)payload);
             }
 
             memset(rx_buffer, 0, 128);

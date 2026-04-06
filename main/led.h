@@ -54,7 +54,7 @@ void set_leds(int r, int g, int b)
     }
 }
 
-void handle_cfg_led_msg(const void *payload)
+void handle_cfg_led(const void *payload)
 {
     msg_cfg_led_t* msg = (msg_cfg_led_t*)payload;
 
