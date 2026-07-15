@@ -84,8 +84,8 @@ esp_err_t jpg_stream_httpd_handler(httpd_req_t *req)
         int64_t frame_time = fr_end - last_frame;
         last_frame = fr_end;
         frame_time /= 1000;
-        ESP_LOGI(TAG, "MJPG: %uKB %ums (%.1ffps)", (unsigned int)(_jpg_buf_len / 1024), (unsigned int)frame_time,
-                 1000.0 / (unsigned int)frame_time);
+        // ESP_LOGI(TAG, "MJPG: %uKB %ums (%.1ffps)", (unsigned int)(_jpg_buf_len / 1024), (unsigned int)frame_time,
+        //          1000.0 / (unsigned int)frame_time);
     }
 
     last_frame = 0;

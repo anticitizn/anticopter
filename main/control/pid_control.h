@@ -96,6 +96,10 @@ void pid_tick()
         pid_reset(&roll_rate_pid);
         pid_reset(&pitch_rate_pid);
         pid_reset(&yaw_rate_pid);
+
+        last_time = esp_timer_get_time();
+
+        return;
     }
 
     int64_t now = esp_timer_get_time();
@@ -164,7 +168,6 @@ void pid_tick()
     float roll_err_rate  = roll_rate_target  - roll_rate;
     float pitch_err_rate = pitch_rate_target - pitch_rate;
     float yaw_err_rate   = yaw_rate_target   - yaw_rate;
-    // printf("error rate: roll %f, pitch %f, yaw %f\n", roll_err_rate, pitch_err_rate, yaw_err_rate);
 
     roll_rate_pid.fIn  = roll_err_rate;
     roll_rate_pid.m_calc(&roll_rate_pid);
@@ -177,13 +180,12 @@ void pid_tick()
     yaw_rate_pid.fIn   = yaw_err_rate;
     yaw_rate_pid.m_calc(&yaw_rate_pid);
     float yaw_cmd = yaw_rate_pid.fOut;
-    printf("rate command: roll %f, pitch %f, yaw %f\n", roll_cmd, pitch_cmd, yaw_cmd);
 
-    // printf("Orientation target: %f %f %f\n", roll_target, pitch_target, yaw_target);
-    // printf("Orientation: %f %f %f\n", roll_deg, pitch_deg, yaw_deg);
-    // printf("Angular rate target: %f %f %f\n", roll_rate_target, pitch_rate_target, yaw_rate_target);
-    // printf("Angular rate command: %f %f %f\n", roll_cmd, pitch_cmd, yaw_cmd);
-    // printf("Actual angular rate: %f %f %f\n", roll_rate, pitch_rate, yaw_rate);
+    // ESP_LOGI("CTRL", "Orientation target: %f %f %f", roll_target, pitch_target, yaw_target);
+    // ESP_LOGI("CTRL", "Orientation: %f %f %f", roll_deg, pitch_deg, yaw_deg);
+    // ESP_LOGI("CTRL", "Angular rate target: %f %f %f", roll_rate_target, pitch_rate_target, yaw_rate_target);
+    // ESP_LOGI("CTRL", "Angular rate command: %f %f %f", roll_cmd, pitch_cmd, yaw_cmd);
+    // ESP_LOGI("CTRL", "Actual angular rate: %f %f %f", roll_rate, pitch_rate, yaw_rate);
 
     //
     // 4. Mixer
@@ -208,7 +210,7 @@ void pid_tick()
     if (m3 < 0) m3 = 0; 
     if (m3 > 100) m3 = 100;
 
-    printf("Motors PWM: %f %f %f %f\n", m0, m1, m2, m3);
+    // ESP_LOGI("CTRL", "Motors PWM: %f %f %f %f", m0, m1, m2, m3);
 
     //
     // 5. Output to motors
@@ -240,7 +242,7 @@ void pid_set_targets(float roll, float pitch, float yaw, float throttle)
     roll_target  = roll;
     pitch_target = pitch;
     yaw_target   = yaw;
-    throttle     = throttle;
+    throttle_cmd     = throttle;
 }
 
 void populate_pid_state_msg(pid_state_t* pid_state, tPID* pid)

@@ -13,8 +13,9 @@
 extern struct sockaddr_storage source_addr;
 extern int sock;
 
-void send_message(const msg_header_t header, const void *payload)
+void send_message(msg_header_t header, const void *payload)
 {
+    header.magic_number = 322;
     struct iovec iov[2];
     iov[0].iov_base = &header;
     iov[0].iov_len  = sizeof(header);

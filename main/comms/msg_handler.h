@@ -63,6 +63,7 @@ void handle_packet(msg_header_t *header, uint8_t *payload)
 {
     if (header->magic_number != comms_config.magic_number)
     {
+        printf("Magic number does not match! Expected %d, received %d", comms_config.magic_number, header->magic_number);
         return;
     }
     

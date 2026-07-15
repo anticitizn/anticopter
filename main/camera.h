@@ -37,8 +37,9 @@
 #define CAM_PIN_HREF 21
 #define CAM_PIN_PCLK 10
 
-size_t _jpg_buf_len;
-uint8_t *_jpg_buf;
+static uint8_t *jpg_buf = NULL;
+static size_t jpg_buf_len = 0;
+static size_t jpg_buf_capacity = 0;
 
 static SemaphoreHandle_t cam_mutex;
 int file_index = 0;
@@ -62,11 +63,11 @@ static esp_err_t init_sdcard(void)
     slot_config.d1  = GPIO_NUM_17;
     slot_config.d2  = GPIO_NUM_5;
     slot_config.d3  = GPIO_NUM_6;
-    slot_config.width = 4;
+    slot_config.width = 2;
 
     esp_vfs_fat_sdmmc_mount_config_t mount_config = {
         .format_if_mount_failed = false,
-        .max_files = 5,
+        .max_files = 10,
         .allocation_unit_size = 16 * 1024
     };
 
@@ -150,45 +151,42 @@ static esp_err_t init_camera(camera_resolution_t resolution, uint8_t jpeg_qualit
     return ESP_OK;
 }
 
-void cam_take_picture()
+void cam_take_picture(void)
 {
-    camera_fb_t *fb = NULL;
-    esp_err_t res = ESP_OK;
-    
-    static int64_t last_frame = 0;
-
-    if (!last_frame)
-    {
-        last_frame = esp_timer_get_time();
-    }
-
     xSemaphoreTake(cam_mutex, portMAX_DELAY);
-    fb = esp_camera_fb_get();
+    
+    camera_fb_t *fb = esp_camera_fb_get();
+
     if (!fb)
     {
         ESP_LOGE(TAG, "Camera capture failed");
-        res = ESP_FAIL;
         return;
     }
 
-    // Camera format is in JPEG already
-    _jpg_buf_len = fb->len;
-    _jpg_buf = fb->buf;
-
-    if (is_recording)
+    if (fb->len > jpg_buf_capacity)
     {
-        append_frame_to_recording(fb->buf, fb->len);
+        uint8_t *new_buf = realloc(jpg_buf, fb->len);
+
+        if (!new_buf)
+        {
+            ESP_LOGE(TAG, "Failed to allocate %u-byte JPEG buffer",
+                     (unsigned)fb->len);
+
+            xSemaphoreGive(cam_mutex);
+            esp_camera_fb_return(fb);
+            return;
+        }
+
+        jpg_buf = new_buf;
+        jpg_buf_capacity = fb->len;
     }
 
-    esp_camera_fb_return(fb);
+    memcpy(jpg_buf, fb->buf, fb->len);
+    jpg_buf_len = fb->len;
+
     xSemaphoreGive(cam_mutex);
 
-    int64_t fr_end = esp_timer_get_time();
-    int64_t frame_time = (fr_end - last_frame) / 1000;
-    last_frame = fr_end;
-    //ESP_LOGI(TAG, "MJPG: %uKB %ums (%.1ffps)", (unsigned int)(_jpg_buf_len / 1024), (unsigned int)frame_time, 1000.0 / (unsigned int)frame_time);
-
-    last_frame = 0;    
+    esp_camera_fb_return(fb);
 }
 
 static esp_err_t camera_apply_settings(framesize_t resolution, int jpeg_quality)
@@ -207,12 +205,15 @@ static esp_err_t camera_apply_settings(framesize_t resolution, int jpeg_quality)
 
 void handle_camera_telemetry(const void *payload)
 {
+    xSemaphoreTake(cam_mutex, portMAX_DELAY);
     msg_header_t msg_header = {
         .msg_type = MSG_CAMERA,
-        .payload_len = _jpg_buf_len,
+        .payload_len = jpg_buf_len,
     };
 
-    send_message(msg_header, _jpg_buf);
+    send_message(msg_header, jpg_buf);
+
+    xSemaphoreGive(cam_mutex);
 }
 
 void handle_cfg_camera(const void *payload)
@@ -241,6 +242,7 @@ void handle_camera_start_recording(const void *payload)
     {
         ESP_LOGE("SD", "Failed to open recording file: %s", path);
         is_recording = false;
+        return;
     }
 
     is_recording = true;

@@ -678,7 +678,7 @@ void imu_poll(void)
 
     last_time_imu = now;
 
-    if (imu_data_ready && mag_data_ready)
+    if (imu_data_ready)
     {
         estimate_position_orientation(acceleration_mg, angular_rate_dps, magnetic_mG, dt);
         imu_data_ready = false;
@@ -736,7 +736,9 @@ void handle_imu_telemetry(const void *payload)
     memcpy(msg_imu.mag_norm, mag_norm, sizeof(msg_imu.mag_norm));
     msg_imu.temperature_degC = temperature_degC;
     
+    // ESP_LOGI("IMU", "Sending acceleration: %f, %f, %f", msg_imu.acceleration_mg[0], msg_imu.acceleration_mg[1], msg_imu.acceleration_mg[2]);
     send_message(msg_header, &msg_imu);
+    
 }
 
 void handle_cfg_imu(const void *payload)
@@ -748,7 +750,7 @@ void handle_cfg_imu(const void *payload)
     Ki_acc = msg->Ki_acc;
     alpha_mag = msg->alpha_mag;
     memcpy(&mag_bias, &msg->mag_bias, sizeof(mag_bias));
-    memcpy(&mag_scale, &msg->mag_scale, sizeof(mag_bias));
+    memcpy(&mag_scale, &msg->mag_scale, sizeof(mag_scale));
 }
 
 #endif

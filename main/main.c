@@ -77,19 +77,18 @@ void app_main()
 
     wifi_init_softap();
 
-    err = init_camera(FRAMESIZE_HD, 12);
+    err = init_camera(FRAMESIZE_VGA, 12);
     err = init_sdcard();
     if (err != ESP_OK)
     {
         printf("err: %s\n", esp_err_to_name(err));
-        return;
     }
 
     imu_init();
 
     xTaskCreatePinnedToCore(control_task, "control", 4096, NULL, 10, NULL, 0);
-    xTaskCreatePinnedToCore(camera_task, "camera", 4096, NULL, 5, NULL, 1);
-    xTaskCreatePinnedToCore(comms_task, "udp_server", 4096, (void*)AF_INET, 5, NULL, 1);
+    xTaskCreatePinnedToCore(camera_task, "camera", 4096, NULL, 5, NULL, 0);
+    xTaskCreatePinnedToCore(comms_task, "udp_server", 18000, (void*)AF_INET, 5, NULL, 1);
 
     ESP_LOGI(TAG, "Anticopter software is up and running\n");
     
