@@ -11,10 +11,14 @@ const char *TAG = "ANTICOPTER";
 #include "connect_wifi.h"
 #include "http.h"
 #include "imu.h"
+#include "tof.h"
 #include "led.h"
 #include "control/pwm_control.h"
 #include "control/pid_control.h"
 #include "comms/networking.h"
+#include "pmw3901/pmw3901.h"
+
+
 
 void control_task(void *arg)
 {
@@ -22,12 +26,15 @@ void control_task(void *arg)
 
     while (true)
     {
-        imu_poll();
-        pid_tick();
-        motors_tick();
-
-        // 200 Hz control loop (5ms)
-        //vTaskDelayUntil(&last, pdMS_TO_TICKS(10));
+        // imu_poll();
+        tof_poll();
+        // pmw3901_poll();
+        pmw3901_debug_motion_registers();
+        // vTaskDelay(pdMS_TO_TICKS(50));
+        // pid_tick();
+        // motors_tick();
+        
+        vTaskDelayUntil(&last, pdMS_TO_TICKS(10));
     }
 }
 
@@ -77,17 +84,28 @@ void app_main()
 
     wifi_init_softap();
 
-    err = init_camera(FRAMESIZE_VGA, 12);
-    err = init_sdcard();
-    if (err != ESP_OK)
-    {
-        printf("err: %s\n", esp_err_to_name(err));
+    // err = init_camera(FRAMESIZE_VGA, 12);
+    // err = init_sdcard();
+    // if (err != ESP_OK)
+    // {
+    //     printf("err: %s\n", esp_err_to_name(err));
+    // }
+
+    // imu_init();
+    tof_init();
+    err = pmw3901_init();
+
+    if (err != ESP_OK) {
+        ESP_LOGE(
+            "MAIN",
+            "PMW3901 init failed: %s",
+            esp_err_to_name(err)
+        );
+        return;
     }
 
-    imu_init();
-
     xTaskCreatePinnedToCore(control_task, "control", 4096, NULL, 10, NULL, 0);
-    xTaskCreatePinnedToCore(camera_task, "camera", 4096, NULL, 5, NULL, 0);
+    // xTaskCreatePinnedToCore(camera_task, "camera", 4096, NULL, 5, NULL, 0);
     xTaskCreatePinnedToCore(comms_task, "udp_server", 18000, (void*)AF_INET, 5, NULL, 1);
 
     ESP_LOGI(TAG, "Anticopter software is up and running\n");

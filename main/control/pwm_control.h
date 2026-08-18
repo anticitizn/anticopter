@@ -62,8 +62,12 @@ static void motor_pwm(int motor_i, float duty_cycle)
 {
     if (motors_armed)
     {
+        duty_cycle = fminf(fmaxf(duty_cycle, 0.0f), 100.0f);
+
+        uint32_t duty =(uint32_t)lroundf(duty_cycle * 1023.0f / 100.0f);
+
         // Set the duty cycle
-        ledc_set_duty(LEDC_LOW_SPEED_MODE, PWM_CHANNEL_BASE + motor_i, (int)((duty_cycle * (1 << PWM_RESOLUTION)) / 100));
+        ledc_set_duty(LEDC_LOW_SPEED_MODE, PWM_CHANNEL_BASE + motor_i, duty);
         ledc_update_duty(LEDC_LOW_SPEED_MODE, PWM_CHANNEL_BASE + motor_i);
     }
     else
