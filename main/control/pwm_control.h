@@ -9,7 +9,6 @@
 #include <stdio.h>
 
 #include "../led.h"
-#include "../imu.h"
 #include "comms/msg_type.h"
 
 #define MOTOR_GPIO_1 39
@@ -97,14 +96,12 @@ void motors_check()
 void handle_arm_msg(const void *payload)
 {
     motors_armed = true;
-    reset_orientation_offset();
     set_leds(0, 10, 0);
 }
 
 void handle_disarm_msg(const void *payload)
 {
     motors_armed = false;
-    reset_orientation_offset();
     set_leds(10, 0, 0);
 }
 

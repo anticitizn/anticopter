@@ -6,7 +6,8 @@ if(${target} STREQUAL "linux")
 endif()
 
 idf_component_register(SRCS "led_strip/led_strip_encoder.c" 
-                    "lsm6dsr/lsm6dsr_reg.c" "lsm6ds3/lsm6ds3_reg.c" "lis3mdl/lis3mdl_reg.c" 
+                    "lsm6dsr/lsm6dsr_reg.c" "lsm6ds3/lsm6ds3_reg.c" "lis3mdl/lis3mdl_reg.c"
+                    "Fusion/FusionAhrs.c" "Fusion/FusionBias.c" "Fusion/FusionCompass.c" "Fusion/FusionConvention.c" "Fusion/FusionRemap.c"
                     "control/pid.c" 
                     "main.c"
                     INCLUDE_DIRS "."

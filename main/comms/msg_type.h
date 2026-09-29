@@ -125,7 +125,7 @@ typedef struct
 typedef struct 
 {   
     // Accelerometer/gyroscope data
-    float acceleration_mg[3];
+    float acceleration_g[3];
     float angular_rate_dps[3];
     float orientation[3];
 

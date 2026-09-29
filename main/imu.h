@@ -11,6 +11,7 @@
 #include "lis3mdl/lis3mdl_reg.h"
 #include "camera.h"
 #include "comms/msg_send.h"
+#include "Fusion/Fusion.h"
 
 /* ---------------------------------------------------------
    I2C Configuration
@@ -26,33 +27,12 @@
 #define LSM6DS3_SENSOR_ADDR 0x6A // IMU
 #define LIS3MDL_SENSOR_ADDR 0x1C // Magnetometer
 
-/* ---------------------------------------------------------
-   Orientation / Filter Configuration
---------------------------------------------------------- */
-#define RAD_TO_DEG (180.0f / M_PI)
-
-static float ahrs_time  = 0.0f;
-
-// Tunable gains
-static float Kp_acc = 2.0f;     // accel correction uses dynamic Kp
-static float Ki_acc = 0.005f;   // integral only from accel error
-static float Kp_mag = 0.0f;     // smaller constant mag correction gain
-static float alpha_mag = 0.2f;  // magnetometer low-pass alpha (0 < alpha < 1, lower = more smoothing)
-
-// Magnetometer LPF
-static float mag_lp[3] = {0.0f, 0.0f, 0.0f};
-static bool  mag_lp_init = false;
-
-// Quaternion + integral feedback
-static float q[4]        = {1.0f, 0.0f, 0.0f, 0.0f};
-static float integralFB[3] = {0.0f, 0.0f, 0.0f};
-
 // Raw IMU data storage
 static int16_t data_raw_acceleration[3] = {0};
 static int16_t data_raw_angular_rate[3] = {0};
 static int16_t data_raw_temperature     = 0;
 
-static float acceleration_mg[3] = {0};
+static float acceleration_g[3] = {0};
 static float angular_rate_dps[3] = {0};
 static float temperature_degC = 0.0f;
 
@@ -81,6 +61,10 @@ static bool mag_data_ready = false;
 
 float mag_bias[3]  = {-4639.000000, 1327.500000, -513.500000};
 float mag_scale[3] = {1.041470, 1.002780, 0.959149};
+
+// Attitude estimation stuff
+FusionAhrs ahrs;
+FusionAhrsSettings ahrsSettings;
 
 /* ---------------------------------------------------------
    Contexts and Buffers
@@ -153,231 +137,6 @@ static void tx_com(uint8_t *buf, uint16_t len)
     return; // stay silent
 }
 
-/*--------------------------------------------------------------------
-   Mahony Filter
- --------------------------------------------------------------------*/
-void MahonyAHRSupdate(float gx, float gy, float gz,
-                      float ax, float ay, float az,
-                      float mx, float my, float mz,
-                      float dt)
-{
-    float norm;
-    float vx, vy, vz;
-    float hx, hy, hz;
-    float bx, bz;
-    float wx, wy, wz;
-    float ex_acc, ey_acc, ez_acc;
-    float ex_mag = 0.0f, ey_mag = 0.0f, ez_mag = 0.0f;
-    float ex, ey, ez;
-    int useMag = 1;
-
-    // --- Normalize accelerometer ---
-    norm = sqrtf(ax * ax + ay * ay + az * az);
-    if (norm > 0.0f) 
-    {
-        ax /= norm;
-        ay /= norm;
-        az /= norm;
-    } 
-    else 
-    {
-        // invalid accel values; ignore its contribution
-        ax = ay = az = 0.0f;
-    }
-
-    // --- Normalize + low-pass magnetometer ---
-    norm = sqrtf(mx * mx + my * my + mz * mz);
-    if (norm > 0.0f) 
-    {
-        mx /= norm;
-        my /= norm;
-        mz /= norm;
-
-        if (!mag_lp_init) 
-        {
-            // Initialize LP filter to first valid sample to avoid a big transient
-            mag_lp[0] = mx;
-            mag_lp[1] = my;
-            mag_lp[2] = mz;
-            mag_lp_init = true;
-        } 
-        else 
-        {
-            mag_lp[0] = alpha_mag * mx + (1.0f - alpha_mag) * mag_lp[0];
-            mag_lp[1] = alpha_mag * my + (1.0f - alpha_mag) * mag_lp[1];
-            mag_lp[2] = alpha_mag * mz + (1.0f - alpha_mag) * mag_lp[2];
-        }
-
-        // Re-normalize filtered mag
-        norm = sqrtf(mag_lp[0] * mag_lp[0] +
-                     mag_lp[1] * mag_lp[1] +
-                     mag_lp[2] * mag_lp[2]);
-        if (norm > 0.0f) 
-        {
-            mx = mag_lp[0] / norm;
-            my = mag_lp[1] / norm;
-            mz = mag_lp[2] / norm;
-        } 
-        else 
-        {
-            useMag = 0;
-        }
-    } 
-    else 
-    {
-        useMag = 0; // fall back to 6 DOF if mag is bad
-    }
-
-    float q0 = q[0];
-    float q1 = q[1];
-    float q2 = q[2];
-    float q3 = q[3];
-
-    // --- Estimated direction of gravity (from quaternion) ---
-    vx = 2.0f * (q1 * q3 - q0 * q2);
-    vy = 2.0f * (q0 * q1 + q2 * q3);
-    vz = q0 * q0 - q1 * q1 - q2 * q2 + q3 * q3;
-
-    // --- Accelerometer error (gravity) ---
-    ex_acc = (ay * vz - az * vy);
-    ey_acc = (az * vx - ax * vz);
-    ez_acc = (ax * vy - ay * vx);
-
-    // --- Magnetometer error (heading), horizontal only ---
-    if (useMag)
-    {
-        // Rotate mag into Earth frame (h = q * m_body * q_conj)
-        hx = 2.0f * mx * (0.5f - q2 * q2 - q3 * q3)
-           + 2.0f * my * (q1 * q2 - q0 * q3)
-           + 2.0f * mz * (q1 * q3 + q0 * q2);
-
-        hy = 2.0f * mx * (q1 * q2 + q0 * q3)
-           + 2.0f * my * (0.5f - q1 * q1 - q3 * q3)
-           + 2.0f * mz * (q2 * q3 - q0 * q1);
-
-        hz = 2.0f * mx * (q1 * q3 - q0 * q2)
-           + 2.0f * my * (q2 * q3 + q0 * q1)
-           + 2.0f * mz * (0.5f - q1 * q1 - q2 * q2);
-
-        // Only use horizontal field for heading (zero vertical component)
-        hx = hx;
-        hy = hy;
-        hz = 0.0f;
-
-        // Horizontal magnitude
-        bx = sqrtf(hx * hx + hy * hy);
-        if (bx < 1e-6f) 
-        {
-            // Degenerate case; skip mag correction
-            useMag = 0;
-        } 
-        else 
-        {
-            // Expected magnetic field direction (body frame) using horizontal-only reference
-            // bz = 0.0f effectively decouples pitch/roll from mag
-            bz = 0.0f;
-
-            wx = 2.0f * bx * (0.5f - q2 * q2 - q3 * q3)
-               + 2.0f * bz * (q1 * q3 - q0 * q2);
-            wy = 2.0f * bx * (q1 * q2 - q0 * q3)
-               + 2.0f * bz * (q0 * q1 + q2 * q3);
-            wz = 2.0f * bx * (q0 * q2 + q1 * q3)
-               + 2.0f * bz * (0.5f - q1 * q1 - q2 * q2);
-
-            // Normalize expected field
-            norm = sqrtf(wx * wx + wy * wy + wz * wz);
-            if (norm > 0.0f) {
-                wx /= norm;
-                wy /= norm;
-                wz /= norm;
-            }
-
-            // Magnetometer error is cross product between measured and expected field
-            ex_mag = (my * wz - mz * wy);
-            ey_mag = (mz * wx - mx * wz);
-            ez_mag = (mx * wy - my * wx);
-        }
-    }
-
-    // --- Total error: accel + mag ---
-    ex = ex_acc + ex_mag;
-    ey = ey_acc + ey_mag;
-    ez = ez_acc + ez_mag;
-
-    // --- Integral feedback (uses accel only, to avoid slow mag drift) ---
-    if (Ki_acc > 0.0f) 
-    {
-        integralFB[0] += Ki_acc * ex_acc * dt;
-        integralFB[1] += Ki_acc * ey_acc * dt;
-        integralFB[2] += Ki_acc * ez_acc * dt;
-
-        gx += integralFB[0];
-        gy += integralFB[1];
-        gz += integralFB[2];
-    }
-
-    // --- Proportional feedback: accel + weakened mag ---
-    gx += Kp_acc * ex_acc + Kp_mag * ex_mag;
-    gy += Kp_acc * ey_acc + Kp_mag * ey_mag;
-    gz += Kp_acc * ez_acc + Kp_mag * ez_mag;
-
-    // --- Integrate quaternion rate ---
-    gx *= 0.5f * dt;
-    gy *= 0.5f * dt;
-    gz *= 0.5f * dt;
-
-    float qDot0 = -q1 * gx - q2 * gy - q3 * gz;
-    float qDot1 =  q0 * gx + q2 * gz - q3 * gy;
-    float qDot2 =  q0 * gy - q1 * gz + q3 * gx;
-    float qDot3 =  q0 * gz + q1 * gy - q2 * gx;
-
-    q0 += qDot0;
-    q1 += qDot1;
-    q2 += qDot2;
-    q3 += qDot3;
-
-    // --- Normalize quaternion ---
-    norm = sqrtf(q0 * q0 + q1 * q1 + q2 * q2 + q3 * q3);
-    if (norm > 0.0f) 
-    {
-        norm = 1.0f / norm;
-        q[0] = q0 * norm;
-        q[1] = q1 * norm;
-        q[2] = q2 * norm;
-        q[3] = q3 * norm;
-    } else 
-    {
-        // Fallback: keep the old quaternion values if normalization fails
-        // (this should basically never happen)
-    }
-}
-
-
-static void quat_to_euler_deg(const float q[4], float euler_deg[3])
-{
-    float q0 = q[0];
-    float q1 = q[1];
-    float q2 = q[2];
-    float q3 = q[3];
-
-    float roll  = atan2f(2.0f * (q0 * q1 + q2 * q3),
-                         1.0f - 2.0f * (q1 * q1 + q2 * q2));
-    float pitch = asinf(2.0f * (q0 * q2 - q3 * q1));
-    float yaw   = atan2f(2.0f * (q0 * q3 + q1 * q2),
-                         1.0f - 2.0f * (q2 * q2 + q3 * q3));
-
-    euler_deg[0] = roll  * RAD_TO_DEG;
-    euler_deg[1] = pitch * RAD_TO_DEG;
-    euler_deg[2] = yaw   * RAD_TO_DEG;
-}
-
-static inline float wrap_angle_180(float x)
-{
-    while (x > 180.0f) x -= 360.0f;
-    while (x < -180.0f) x += 360.0f;
-    return x;
-}
-
 static inline void apply_mount_matrix(float v[3], const float R[3][3])
 {
     float x = v[0];
@@ -387,39 +146,6 @@ static inline void apply_mount_matrix(float v[3], const float R[3][3])
     v[0] = R[0][0]*x + R[0][1]*y + R[0][2]*z;
     v[1] = R[1][0]*x + R[1][1]*y + R[1][2]*z;
     v[2] = R[2][0]*x + R[2][1]*y + R[2][2]*z;
-}
-
-void estimate_position_orientation(float accel[3], float gyro[3], float mag[3], double dt)
-{
-    // Early-time Kp boost with linear ramp-down
-    ahrs_time += (float)dt;
-
-    float gyro_rad[3];
-    gyro_rad[0] = gyro[0] * (float)M_PI / 180.0f;
-    gyro_rad[1] = gyro[1] * (float)M_PI / 180.0f;
-    gyro_rad[2] = gyro[2] * (float)M_PI / 180.0f;
-
-    float mx = 0.0f, my = 0.0f, mz = 0.0f;
-    if (mag_data_ready) 
-    {
-        mx = mag[0];
-        my = mag[1];
-        mz = mag[2];
-    }
-
-    MahonyAHRSupdate(
-        gyro_rad[0], gyro_rad[1], gyro_rad[2],
-        accel[0],    accel[1],    accel[2],
-        mx,          my,          mz,
-        (float)dt
-    );
-
-    float euler_deg[3];
-    quat_to_euler_deg(q, euler_deg);
-
-    orientation[0] = wrap_angle_180(euler_deg[0] - orientation_offset[0]);
-    orientation[1] = wrap_angle_180(euler_deg[1] - orientation_offset[1]);
-    orientation[2] = wrap_angle_180(euler_deg[2] - orientation_offset[2]);
 }
 
 
@@ -512,11 +238,11 @@ void poll_lsm6ds3(void)
 
         // printf("%d %d %d\n", data_raw_acceleration[0], data_raw_acceleration[1], data_raw_acceleration[2]);
 
-        acceleration_mg[0] = 9.81f * lsm6ds3_from_fs2g_to_mg(data_raw_acceleration[0]) / 1000.0f;
-        acceleration_mg[1] = 9.81f * lsm6ds3_from_fs2g_to_mg(data_raw_acceleration[1]) / 1000.0f;
-        acceleration_mg[2] = 9.81f * lsm6ds3_from_fs2g_to_mg(data_raw_acceleration[2]) / 1000.0f;
+        acceleration_g[0] = lsm6ds3_from_fs2g_to_mg(data_raw_acceleration[0]) / 1000.0f;
+        acceleration_g[1] = lsm6ds3_from_fs2g_to_mg(data_raw_acceleration[1]) / 1000.0f;
+        acceleration_g[2] = lsm6ds3_from_fs2g_to_mg(data_raw_acceleration[2]) / 1000.0f;
 
-        apply_mount_matrix(acceleration_mg, R_mount_matrix);
+        apply_mount_matrix(acceleration_g, R_mount_matrix);
 
         imu_data_ready = true;
     }
@@ -592,74 +318,6 @@ void poll_lis3mdl(void)
     }
 }
 
-static void ahrs_init_from_accel_mag(const float accel[3], const float mag[3])
-{
-    // ------------------------------
-    // 1. Normalize accel
-    // ------------------------------
-    float ax = accel[0], ay = accel[1], az = accel[2];
-    float norm = sqrtf(ax*ax + ay*ay + az*az);
-    if (norm > 0.0f) {
-        ax /= norm; ay /= norm; az /= norm;
-    }
-
-    // ------------------------------
-    // 2. Compute roll & pitch from accel
-    // ------------------------------
-    float roll  = atan2f(ay, az);
-    float pitch = -atan2f(ax, sqrtf(ay*ay + az*az));
-
-    // ------------------------------
-    // 3. Normalize magnetometer
-    // ------------------------------
-    float mx = mag[0], my = mag[1], mz = mag[2];
-    norm = sqrtf(mx*mx + my*my + mz*mz);
-    if (norm > 0.0f) {
-        mx /= norm; my /= norm; mz /= norm;
-    }
-
-    // ------------------------------
-    // 4. Tilt-compensated magnetic heading
-    // (classic aerospace method)
-    // ------------------------------
-    float cr = cosf(roll),   sr = sinf(roll);
-    float cp = cosf(pitch),  sp = sinf(pitch);
-
-    float mx2 = mx * cp + mz * sp;
-    float my2 = mx * sr * sp + my * cr - mz * sr * cp;
-
-    float yaw = atan2f(-my2, mx2);
-
-    // ------------------------------
-    // 5. Convert Euler -> quaternion
-    // ------------------------------
-    float cy = cosf(yaw * 0.5f);
-    float sy = sinf(yaw * 0.5f);
-    float cp2 = cosf(pitch * 0.5f);
-    float sp2 = sinf(pitch * 0.5f);
-    float cr2 = cosf(roll * 0.5f);
-    float sr2 = sinf(roll * 0.5f);
-
-    q[0] = cr2*cp2*cy + sr2*sp2*sy;   // w
-    q[1] = sr2*cp2*cy - cr2*sp2*sy;   // x
-    q[2] = cr2*sp2*cy + sr2*cp2*sy;   // y
-    q[3] = cr2*cp2*sy - sr2*sp2*cy;   // z
-
-    // ------------------------------
-    // 6. Normalize q
-    // ------------------------------
-    norm = sqrtf(q[0]*q[0]+q[1]*q[1]+q[2]*q[2]+q[3]*q[3]);
-    float inv = 1.0f/norm;
-
-    q[0]*=inv; q[1]*=inv; q[2]*=inv; q[3]*=inv;
-
-    // ------------------------------
-    // 7. Reset integrators
-    // ------------------------------
-    integralFB[0] = integralFB[1] = integralFB[2] = 0.0f;
-}
-
-
 // Poll LSM6DS3 accelerometer + gyro and LIS3MDL magnetometer
 bool imu_poll(void)
 {
@@ -673,9 +331,21 @@ bool imu_poll(void)
 
         last_time_imu = now;
 
-        estimate_position_orientation(acceleration_mg, angular_rate_dps, magnetic_mG, dt);
+        const FusionVector gyroscope = {.array = {angular_rate_dps[0], angular_rate_dps[1], angular_rate_dps[2]}};
+        const FusionVector accelerometer = {.array = {acceleration_g[0], acceleration_g[1], acceleration_g[2]}};
+
+        FusionAhrsSetSamplePeriod(&ahrs, (float)dt);
+        FusionAhrsUpdateNoMagnetometer(&ahrs, gyroscope, accelerometer);
+
+        const FusionEuler euler = FusionQuaternionToEuler(FusionAhrsGetQuaternion(&ahrs));
+        orientation[0] = euler.angle.roll;
+        orientation[1] = euler.angle.pitch;
+        orientation[2] = euler.angle.yaw;
+
         imu_data_ready = false;
         mag_data_ready = false;
+
+        printf("Dt: %lf\n", dt);
         
         return true;
     }
@@ -683,49 +353,24 @@ bool imu_poll(void)
     return false;
 }
 
+void init_ahrs(void)
+{
+    FusionAhrsInitialise(&ahrs);
+
+    ahrsSettings = fusionAhrsDefaultSettings;
+    ahrsSettings.sampleRate = 400.0f; // Hz
+    FusionAhrsSetSettings(&ahrs, &ahrsSettings);
+}
+
 // Initialize LSM6DS3 accelerometer + gyro and LIS3MDL magnetometer
 void imu_init(void)
 {
-
     init_lsm6ds3();
     init_lis3mdl();
 
-    // Reset AHRS internal state
-    ahrs_time = 0.0f;
-    q[0] = 1.0f; q[1] = q[2] = q[3] = 0.0f;
-    integralFB[0] = integralFB[1] = integralFB[2] = 0.0f;
+    init_ahrs();
+
     last_time_imu = esp_timer_get_time();
-
-    alpha_mag = 1.0f;
-
-    // Give the filter some time to converge in the current pose
-    for (int i = 0; i < 100; ++i)
-    {
-        imu_poll();
-        vTaskDelay(pdMS_TO_TICKS(10));
-    }
-
-    ahrs_init_from_accel_mag(acceleration_mg, mag_norm);
-
-    alpha_mag = 0.2f;
-
-    float euler_deg[3];
-    quat_to_euler_deg(q, euler_deg);
-
-    // Define current orientation as zero
-    orientation_offset[0] = euler_deg[0];
-    orientation_offset[1] = euler_deg[1];
-    orientation_offset[2] = euler_deg[2];
-}
-
-void reset_orientation_offset()
-{
-    float euler_deg[3];
-    quat_to_euler_deg(q, euler_deg);
-
-    orientation_offset[0] = euler_deg[0];
-    orientation_offset[1] = euler_deg[1];
-    orientation_offset[2] = euler_deg[2];
 }
 
 void handle_imu_telemetry(const void *payload)
@@ -737,14 +382,14 @@ void handle_imu_telemetry(const void *payload)
 
     msg_imu_t msg_imu = {0};
 
-    memcpy(msg_imu.acceleration_mg, acceleration_mg, sizeof(msg_imu.acceleration_mg));
+    memcpy(msg_imu.acceleration_g, acceleration_g, sizeof(msg_imu.acceleration_g));
     memcpy(msg_imu.angular_rate_dps, angular_rate_dps, sizeof(msg_imu.angular_rate_dps));
     memcpy(msg_imu.orientation, orientation, sizeof(msg_imu.orientation));
     memcpy(msg_imu.magnetic_mG, magnetic_mG, sizeof(msg_imu.magnetic_mG));
     memcpy(msg_imu.mag_norm, mag_norm, sizeof(msg_imu.mag_norm));
     msg_imu.temperature_degC = temperature_degC;
     
-    // ESP_LOGI("IMU", "Sending acceleration: %f, %f, %f", msg_imu.acceleration_mg[0], msg_imu.acceleration_mg[1], msg_imu.acceleration_mg[2]);
+    // ESP_LOGI("IMU", "Sending acceleration: %f, %f, %f", msg_imu.acceleration_g[0], msg_imu.acceleration_g[1], msg_imu.acceleration_g[2]);
     send_message(msg_header, &msg_imu);
     
 }
@@ -753,10 +398,6 @@ void handle_cfg_imu(const void *payload)
 {
     msg_cfg_imu_t* msg = (msg_cfg_imu_t*)payload;
 
-    Kp_acc = msg->Kp_acc;
-    Kp_mag = msg->Kp_mag;
-    Ki_acc = msg->Ki_acc;
-    alpha_mag = msg->alpha_mag;
     memcpy(&mag_bias, &msg->mag_bias, sizeof(mag_bias));
     memcpy(&mag_scale, &msg->mag_scale, sizeof(mag_scale));
 }
