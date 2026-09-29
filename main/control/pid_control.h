@@ -2,6 +2,9 @@
 #ifndef ANTICOPTER_PID_CONTROL_H
 #define ANTICOPTER_PID_CONTROL_H
 
+#include "nvs_flash.h"
+#include "nvs.h"
+
 #include "pid.h"
 #include "pwm_control.h"
 #include "comms/msg_send.h"
@@ -32,6 +35,16 @@ float throttle_cmd = 0.0f;
 extern float orientation[3];       // orientation (roll, pitch, yaw in deg)
 extern float angular_rate_dps[3];  // angular rate (roll, pitch, yaw in deg/s)
 
+void populate_pid_from_cfg_msg(tPID* pid, pid_cfg_t* pid_cfg)
+{
+    pid->fKp = pid_cfg->kP;
+    pid->fKi = pid_cfg->kI;
+    pid->fKd = pid_cfg->kD;
+
+    pid->fUpIntLim = pid_cfg->int_up_lim;
+    pid->fLowIntLim = pid_cfg->int_low_lim;
+}
+
 //
 // ===================== PID INITIALIZATION =====================
 //
@@ -44,7 +57,7 @@ void pid_init()
     //
     roll_angle_pid.fKp = 1.0f;
     roll_angle_pid.fKi = 0.00f;
-    roll_angle_pid.fKd = 0.05f;
+    roll_angle_pid.fKd = 0.00f;
     roll_angle_pid.fUpOutLim  =  100.0f;
     roll_angle_pid.fLowOutLim = -100.0f;
     roll_angle_pid.fUpIntLim  =  0.0f;
@@ -62,9 +75,9 @@ void pid_init()
     //
     // -------- RATE (INNER) LOOP --------
     //
-    roll_rate_pid.fKp = 0.1f;
-    roll_rate_pid.fKi = 0;
-    roll_rate_pid.fKd = 0;
+    roll_rate_pid.fKp = 0.20f;
+    roll_rate_pid.fKi = 0.00f;
+    roll_rate_pid.fKd = 0.00f;
     roll_rate_pid.fUpOutLim  =  100.0f;
     roll_rate_pid.fLowOutLim = -100.0f;
     roll_rate_pid.fUpIntLim  =  0.0f;
@@ -79,6 +92,31 @@ void pid_init()
 
     yaw_rate_pid.fUpIntLim  =  15.0f;
     yaw_rate_pid.fLowIntLim =  -15.0f;
+
+    // Init PID config values from flash
+    msg_cfg_pid_t msg = {0};
+    size_t size = sizeof(msg);
+    nvs_handle_t nvs;
+
+    nvs_open("pid_storage", NVS_READONLY, &nvs);
+    esp_err_t result = nvs_get_blob(nvs, "config", &msg, &size);
+    nvs_close(nvs);
+
+    populate_pid_from_cfg_msg(&roll_rate_pid, &msg.rate_roll_pid);
+    populate_pid_from_cfg_msg(&pitch_rate_pid, &msg.rate_pitch_pid);
+    populate_pid_from_cfg_msg(&yaw_rate_pid, &msg.rate_yaw_pid);
+
+    populate_pid_from_cfg_msg(&roll_angle_pid, &msg.angle_roll_pid);
+    populate_pid_from_cfg_msg(&pitch_angle_pid, &msg.angle_pitch_pid);
+    populate_pid_from_cfg_msg(&yaw_angle_pid, &msg.angle_yaw_pid);
+
+    pid_reset(&roll_angle_pid);
+    pid_reset(&pitch_angle_pid);
+    pid_reset(&yaw_angle_pid);
+
+    pid_reset(&roll_rate_pid);
+    pid_reset(&pitch_rate_pid);
+    pid_reset(&yaw_rate_pid);
 }
 
 //
@@ -98,6 +136,11 @@ void pid_tick()
         pid_reset(&yaw_rate_pid);
 
         last_time = esp_timer_get_time();
+
+        for (int motor = 0; motor < 4; ++motor) 
+        {
+            set_motor_pwm(motor, 0);
+        }
 
         return;
     }
@@ -152,7 +195,7 @@ void pid_tick()
         // Outer + inner loop
         roll_rate_target = roll_angle_pid.fOut;
         pitch_rate_target = pitch_angle_pid.fOut;
-        yaw_rate_target = yaw_angle_pid.fOut;
+        yaw_rate_target = yaw_target;
     }
     else if (control_mode == CFG_MODE_RATE_HOLD)
     {
@@ -290,16 +333,6 @@ void handle_control_target_msg(const void *payload)
     yaw_target = msg->yaw;
 }
 
-void populate_pid_from_cfg_msg(tPID* pid, pid_cfg_t* pid_cfg)
-{
-    pid->fKp = pid_cfg->kP;
-    pid->fKi = pid_cfg->kI;
-    pid->fKd = pid_cfg->kD;
-
-    pid->fUpIntLim = pid_cfg->int_up_lim;
-    pid->fLowIntLim = pid_cfg->int_low_lim;
-}
-
 void handle_cfg_pid(const void *payload)
 {
     msg_cfg_pid_t* msg = (msg_cfg_pid_t*)payload;
@@ -319,6 +352,14 @@ void handle_cfg_pid(const void *payload)
     pid_reset(&roll_rate_pid);
     pid_reset(&pitch_rate_pid);
     pid_reset(&yaw_rate_pid);
+
+    nvs_handle_t nvs;
+    nvs_open("pid_storage", NVS_READWRITE, &nvs);
+    nvs_set_blob(nvs, "config", msg, sizeof(*msg));
+    nvs_commit(nvs);
+    nvs_close(nvs);
+
+    printf("New roll rate P: %f\n", roll_rate_pid.fKp);
 }
 
 #endif
