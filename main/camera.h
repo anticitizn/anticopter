@@ -15,6 +15,7 @@
 #include "driver/sdmmc_host.h"
 #include "driver/sdmmc_defs.h"
 #include "sdmmc_cmd.h"
+#include "avi.h"
 
 #define CONFIG_XCLK_FREQ 20000000
 
@@ -47,13 +48,14 @@ int file_index = 0;
 // Recording state
 static FILE *record_file = NULL;
 static bool is_recording = false;
+static avi_mjpeg_writer_t record_avi;
 
 static esp_err_t init_sdcard(void)
 {
     esp_err_t ret;
 
     sdmmc_host_t host = SDMMC_HOST_DEFAULT();
-    host.flags = SDMMC_HOST_FLAG_1BIT | SDMMC_HOST_FLAG_4BIT; // use 4-bit bus
+    host.flags = SDMMC_HOST_FLAG_4BIT; // use 4-bit bus
     host.max_freq_khz = SDMMC_FREQ_HIGHSPEED;
 
     sdmmc_slot_config_t slot_config = SDMMC_SLOT_CONFIG_DEFAULT();
@@ -63,10 +65,10 @@ static esp_err_t init_sdcard(void)
     slot_config.d1  = GPIO_NUM_17;
     slot_config.d2  = GPIO_NUM_5;
     slot_config.d3  = GPIO_NUM_6;
-    slot_config.width = 2;
+    slot_config.width = 4;
 
     esp_vfs_fat_sdmmc_mount_config_t mount_config = {
-        .format_if_mount_failed = true,
+        .format_if_mount_failed = false,
         .max_files = 10,
         .allocation_unit_size = 16 * 1024
     };
@@ -80,29 +82,6 @@ static esp_err_t init_sdcard(void)
     }
 
     sdmmc_card_print_info(stdout, card);
-    return ESP_OK;
-}
-
-static esp_err_t append_frame_to_recording(const uint8_t *buf, size_t len)
-{
-    if (!is_recording || !record_file)
-    {
-        return ESP_OK;
-    }
-
-    // Write raw JPEG frame directly into the MJPEG stream.
-    // Many MJPEG readers can parse concatenated JPEG images.
-    size_t written = fwrite(buf, 1, len, record_file);
-    if (written != len)
-    {
-        ESP_LOGE("SD", "Failed to write MJPEG frame");
-        fclose(record_file);
-        record_file = NULL;
-        is_recording = false;
-        return ESP_FAIL;
-    }
-
-    fflush(record_file);
     return ESP_OK;
 }
 
@@ -184,6 +163,19 @@ void cam_take_picture(void)
     memcpy(jpg_buf, fb->buf, fb->len);
     jpg_buf_len = fb->len;
 
+    if (is_recording && record_file) 
+    {
+        esp_err_t err = avi_mjpeg_write_frame(&record_avi, fb->buf, fb->len);
+        if (err != ESP_OK) 
+        {
+            ESP_LOGE("SD", "Failed to write AVI frame: %s", esp_err_to_name(err));
+            avi_mjpeg_finish(&record_avi);
+            fclose(record_file);
+            record_file = NULL;
+            is_recording = false;
+        }
+    }
+
     xSemaphoreGive(cam_mutex);
 
     esp_camera_fb_return(fb);
@@ -229,23 +221,34 @@ void handle_camera_start_recording(const void *payload)
 {
     char path[64];
 
-    // If already recording, close current file and start a new one
-    if (record_file)
+    if (record_file) 
     {
+        avi_mjpeg_finish(&record_avi);
         fclose(record_file);
         record_file = NULL;
+        is_recording = false;
     }
 
-    snprintf(path, sizeof(path), "/sdcard/%d.mjpeg", file_index++);
-    record_file = fopen(path, "wb");
-    if (!record_file)
+    snprintf(path, sizeof(path), "/sdcard/%d.avi", file_index++);
+
+    FILE *f = fopen(path, "wb");
+    if (!f) 
     {
         ESP_LOGE("SD", "Failed to open recording file: %s", path);
-        is_recording = false;
         return;
     }
 
+    esp_err_t err = avi_mjpeg_start(&record_avi, f, 640, 480, 0);
+    if (err != ESP_OK) 
+    {
+        ESP_LOGE("SD", "Failed to start AVI: %s", esp_err_to_name(err));
+        fclose(f);
+        return;
+    }
+
+    record_file = f;
     is_recording = true;
+
     ESP_LOGI("SD", "Started recording: %s", path);
 }
 
@@ -253,6 +256,7 @@ void handle_camera_stop_recording(const void *payload)
 {
     if (record_file)
     {
+        avi_mjpeg_finish(&record_avi);
         fflush(record_file);
         fclose(record_file);
         record_file = NULL;
