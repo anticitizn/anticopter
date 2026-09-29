@@ -344,8 +344,6 @@ bool imu_poll(void)
 
         imu_data_ready = false;
         mag_data_ready = false;
-
-        printf("Dt: %lf\n", dt);
         
         return true;
     }
