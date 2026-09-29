@@ -66,7 +66,7 @@ static esp_err_t init_sdcard(void)
     slot_config.width = 2;
 
     esp_vfs_fat_sdmmc_mount_config_t mount_config = {
-        .format_if_mount_failed = false,
+        .format_if_mount_failed = true,
         .max_files = 10,
         .allocation_unit_size = 16 * 1024
     };

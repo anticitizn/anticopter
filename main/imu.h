@@ -18,7 +18,7 @@
 #define I2C_MASTER_SCL_IO 1
 #define I2C_MASTER_SDA_IO 2
 #define I2C_MASTER_NUM I2C_NUM_0
-#define I2C_MASTER_FREQ_HZ 100000
+#define I2C_MASTER_FREQ_HZ 400000
 #define I2C_MASTER_TX_BUF_DISABLE 0
 #define I2C_MASTER_RX_BUF_DISABLE 0
 #define I2C_MASTER_TIMEOUT_MS 1000
@@ -35,8 +35,8 @@ static float ahrs_time  = 0.0f;
 
 // Tunable gains
 static float Kp_acc = 2.0f;     // accel correction uses dynamic Kp
-static float Kp_mag = 0.0f;     // smaller constant mag correction gain
 static float Ki_acc = 0.005f;   // integral only from accel error
+static float Kp_mag = 0.0f;     // smaller constant mag correction gain
 static float alpha_mag = 0.2f;  // magnetometer low-pass alpha (0 < alpha < 1, lower = more smoothing)
 
 // Magnetometer LPF
@@ -661,34 +661,32 @@ static void ahrs_init_from_accel_mag(const float accel[3], const float mag[3])
 
 
 // Poll LSM6DS3 accelerometer + gyro and LIS3MDL magnetometer
-void imu_poll(void)
+bool imu_poll(void)
 {
     poll_lsm6ds3();
     poll_lis3mdl();
 
-    if (!last_time_imu)
-    {
-        last_time_imu = esp_timer_get_time();
-    }
-
-    int64_t now = esp_timer_get_time();
-    double dt = (double)(now - last_time_imu) / 1e6;
-
-    // printf("dt: %f\n", dt);
-
-    last_time_imu = now;
-
     if (imu_data_ready)
     {
+        int64_t now = esp_timer_get_time();
+        double dt = (double)(now - last_time_imu) / 1e6;
+
+        last_time_imu = now;
+
         estimate_position_orientation(acceleration_mg, angular_rate_dps, magnetic_mG, dt);
         imu_data_ready = false;
         mag_data_ready = false;
+        
+        return true;
     }
+
+    return false;
 }
 
 // Initialize LSM6DS3 accelerometer + gyro and LIS3MDL magnetometer
 void imu_init(void)
 {
+
     init_lsm6ds3();
     init_lis3mdl();
 
@@ -696,7 +694,7 @@ void imu_init(void)
     ahrs_time = 0.0f;
     q[0] = 1.0f; q[1] = q[2] = q[3] = 0.0f;
     integralFB[0] = integralFB[1] = integralFB[2] = 0.0f;
-    last_time_imu = 0;
+    last_time_imu = esp_timer_get_time();
 
     alpha_mag = 1.0f;
 
@@ -715,6 +713,16 @@ void imu_init(void)
     quat_to_euler_deg(q, euler_deg);
 
     // Define current orientation as zero
+    orientation_offset[0] = euler_deg[0];
+    orientation_offset[1] = euler_deg[1];
+    orientation_offset[2] = euler_deg[2];
+}
+
+void reset_orientation_offset()
+{
+    float euler_deg[3];
+    quat_to_euler_deg(q, euler_deg);
+
     orientation_offset[0] = euler_deg[0];
     orientation_offset[1] = euler_deg[1];
     orientation_offset[2] = euler_deg[2];

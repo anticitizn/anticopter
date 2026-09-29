@@ -9,6 +9,7 @@
 #include <stdio.h>
 
 #include "../led.h"
+#include "../imu.h"
 #include "comms/msg_type.h"
 
 #define MOTOR_GPIO_1 39
@@ -21,20 +22,9 @@
 #define PWM_FREQ_HZ 40000
 #define PWM_RESOLUTION LEDC_TIMER_10_BIT
 
-// The higher the beta value, the faster the actual PWM value reaches the desired PWM
-#define LPF_BETA_LOW 1.0   // This is used for current PWM values under 40
-#define LPF_BETA_HIGH 1.0 // This is used for current PWM values equal to or over 40
-
 bool motors_armed = false;
 
 float current_motor_pwm[4] = {0};
-float desired_motor_pwm[4] = {0};
-
-// Simple digital low-pass filter to prevent hard PWM jumps that cause hte inrush current to spike and the board to reset
-float lpf_smooth(float current_value, float new_value, float beta)
-{
-    return current_value - (beta * (current_value - new_value));
-}
 
 void setup_pwm()
 {
@@ -86,36 +76,6 @@ static void motors_pwm(float duty_cycle)
     }
 }
 
-// This needs to be called in the main control loop
-void motors_tick()
-{
-    for (int i = 0; i < 4; i++)
-    {
-        // On increasing PWM values, we run the PWM output through a digital low-pass filter to reduce the current inrush spike
-        // When the PWM is decreasing instead, there's no need to do it, so we just don't. This results in control hysteresis, but
-        // seems to be fine for now. (it's also useful/necessary to be able to always stop all motors immediately)
-        if (desired_motor_pwm[i] > current_motor_pwm[i])
-        {
-            float beta = current_motor_pwm[i] >= 40 ? LPF_BETA_HIGH : LPF_BETA_LOW;
-            int smoothed_duty_cycle = (int)floor(lpf_smooth(current_motor_pwm[i], desired_motor_pwm[i], beta));
-            motor_pwm(i, smoothed_duty_cycle);
-            current_motor_pwm[i] = smoothed_duty_cycle;
-        }
-        else
-        {
-            motor_pwm(i, desired_motor_pwm[i]);
-            current_motor_pwm[i] = desired_motor_pwm[i];
-        }
-        
-        // printf("Pwm | Current: %f | Desired: %f\n", current_motor_pwm[i], desired_motor_pwm[i]);
-    }
-}
-
-void set_motor_pwm(int motor_i, float duty_cycle)
-{
-    desired_motor_pwm[motor_i] = duty_cycle;
-}
-
 // Spin each motor very briefly at low power in sequence
 void motors_check()
 {
@@ -137,20 +97,22 @@ void motors_check()
 void handle_arm_msg(const void *payload)
 {
     motors_armed = true;
-    set_leds(0, 30, 0);
+    reset_orientation_offset();
+    set_leds(0, 10, 0);
 }
 
 void handle_disarm_msg(const void *payload)
 {
     motors_armed = false;
-    set_leds(30, 0, 0);
+    reset_orientation_offset();
+    set_leds(10, 0, 0);
 }
 
 void handle_motor_pwm_msg(const void *payload)
 {
     msg_control_motor_pwm_t* msg = (msg_control_motor_pwm_t*)payload;
 
-    memcpy(&desired_motor_pwm, &msg->pwm, sizeof(msg->pwm));
+    memcpy(&motor_pwm, &msg->pwm, sizeof(msg->pwm));
 }
 
 

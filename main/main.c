@@ -22,12 +22,14 @@ void control_task(void *arg)
 
     while (true)
     {
-        imu_poll();
-        pid_tick();
-        motors_tick();
+        if (imu_poll())
+        {
+            // Only run PID control loops when a new IMU update comes in
+            pid_tick();
+        }
 
-        // 200 Hz control loop (5ms)
-        vTaskDelayUntil(&last, pdMS_TO_TICKS(10));
+        // 400 Hz control loop (2.5ms)
+        vTaskDelayUntil(&last, pdMS_TO_TICKS(2.5));
     }
 }
 
@@ -43,12 +45,15 @@ void camera_task(void *arg)
 
 void app_main()
 {
+    setup_pwm();
+    motors_pwm(0.0f);
+
     init_leds();
 
     // Little LED bootup animation
     for (int i = 0; i < 4; i++)
     {
-        set_led(i, 50, 50, 50);
+        set_led(i, 10, 10, 10);
         vTaskDelay(200 / portTICK_PERIOD_MS);
     }
 
@@ -58,9 +63,8 @@ void app_main()
         vTaskDelay(200 / portTICK_PERIOD_MS);
     }
 
-    set_leds(30, 0, 0);
+    set_leds(10, 0, 0);
 
-    setup_pwm();
     motors_check();
 
     pid_init();

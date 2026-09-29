@@ -124,8 +124,8 @@ void pid_init()
 //
 void pid_tick()
 {
-    // Prevent windup while unpowered
-    if (throttle_cmd < 1)
+    // Prevent windup while stationary
+    if (throttle_cmd < 30)
     {
         pid_reset(&roll_angle_pid);
         pid_reset(&pitch_angle_pid);
@@ -139,7 +139,7 @@ void pid_tick()
 
         for (int motor = 0; motor < 4; ++motor) 
         {
-            set_motor_pwm(motor, 0);
+            motor_pwm(motor, 0);
         }
 
         return;
@@ -262,17 +262,17 @@ void pid_tick()
     {
         if (throttle_cmd > 1)
         {
-            set_motor_pwm(0, m0);
-            set_motor_pwm(1, m1);
-            set_motor_pwm(2, m2);
-            set_motor_pwm(3, m3);
+            motor_pwm(0, m0);
+            motor_pwm(1, m1);
+            motor_pwm(2, m2);
+            motor_pwm(3, m3);
         }
         else
         {
-            set_motor_pwm(0, 0);
-            set_motor_pwm(1, 0);
-            set_motor_pwm(2, 0);
-            set_motor_pwm(3, 0);
+            motor_pwm(0, 0);
+            motor_pwm(1, 0);
+            motor_pwm(2, 0);
+            motor_pwm(3, 0);
         }
     }
     

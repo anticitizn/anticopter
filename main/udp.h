@@ -179,10 +179,10 @@ static void udp_server_task(void *pvParameters)
 
                     if (sscanf(payload, "%d %d %d %d", &mot0, &mot1, &mot2, &mot3) == 4)
                     {
-                        set_motor_pwm(0, mot0);
-                        set_motor_pwm(1, mot1);
-                        set_motor_pwm(2, mot2);
-                        set_motor_pwm(3, mot3);
+                        motor_pwm(0, mot0);
+                        motor_pwm(1, mot1);
+                        motor_pwm(2, mot2);
+                        motor_pwm(3, mot3);
                         ESP_LOGI(TAG, "MOTORS: %d, %d, %d, %d", mot0, mot1, mot2, mot3);
                     } 
                     else 
